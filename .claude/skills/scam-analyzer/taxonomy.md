@@ -2,7 +2,12 @@
 
 Khung 5 nhóm lấy từ cảnh báo "25 kịch bản lừa đảo trên không gian mạng năm 2026" của Công an TP Hà Nội (09/2026).
 Các báo đăng lại chỉ nêu 5 nhóm, không liệt kê đủ 25 kịch bản; các kịch bản con dưới đây do đội tổng hợp từ cảnh báo và báo chí.
-**Việc của ngày 1:** tìm thông báo gốc, đối chiếu và bổ sung đủ 25 mã kịch bản.
+
+**Đối chiếu nguồn (ngày tìm: 2026-11-24).** Đã đọc 3 bài:
+Báo Pháp luật VN – Doanh nhân (09/09/2026), Luật sư Việt Nam lsvn.vn (20/09/2026), CafeF (12/09/2026).
+Kết luận: **các nguồn chỉ công bố 5 nhóm**, mỗi nhóm vài ví dụ (khoảng 10–11 thủ đoạn), không đánh số, không có danh sách 25 kịch bản.
+Vì vậy giữ **24 mã hiện có làm bản làm việc**. Mọi thủ đoạn nêu trong nguồn đều đã có mã, trừ 2 trường hợp chưa có mã riêng: mạo danh bệnh viện (xếp tạm vào G1, `scenario_id` = null) và mạo danh nhà trường (gần nhất là G1.6).
+Khi tìm được văn bản gốc của Công an TP Hà Nội hoặc Bộ Công an thì đối chiếu lại.
 
 | Nhóm | Tên | Kịch bản con (mã) | Dấu hiệu chính | Câu hỏi kiểm chứng gợi ý |
 |---|---|---|---|---|
@@ -25,5 +30,7 @@ urgency (gấp) · authority (quyền lực) · secrecy (giữ bí mật) · gre
 ## Nguồn
 
 - Báo Pháp luật VN, 09/09/2026 — Công an Hà Nội cảnh báo 25 kịch bản lừa đảo 2026
+- Luật sư Việt Nam (lsvn.vn), 20/09/2026 — Cảnh giác trước 25 kịch bản lừa đảo trên không gian mạng năm 2026
+- CafeF, 12/09/2026 — Nhận diện 25 kịch bản lừa đảo trên không gian mạng năm 2026
 - Nhân Dân, 28/02/2026 — Dự báo điểm nóng lừa đảo trực tuyến 2026 (đa kênh, AI hóa tấn công)
 - VietNamNet, 07/01/2026 — mạo danh công an là hình thức phổ biến nhất 2025
