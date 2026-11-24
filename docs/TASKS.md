@@ -27,12 +27,16 @@ Nhánh `feat/<vai>-<việc>`, merge qua PR. "Xong" = có bằng chứng dán và
 |---|---|---|---|---|
 | **D2-BE-01** `POST /v1/analyze` | backend-engineer | `apps/api/app/api/**`, `apps/api/app/schemas/**`, `apps/api/tests/**` | Nhận **JSON base64** theo hợp đồng dưới (KHÔNG multipart), gọi `analyzer.analyze()`, **validate output theo `analysis.schema.json` trước khi trả**; test cho cả 413/415/422; `pytest` xanh; dán output `curl` cho 1 ảnh + 1 văn bản | 25/11 14:00 |
 | **D2-BE-02** Deploy API 1 instance | backend-engineer | `infra/**`, `apps/api/Dockerfile`, `.env.example` | `bash .claude/skills/deploy-runbook/scripts/smoke_test.sh <API_URL>` pass; URL dán vào `docs/STATUS.md`; secret chỉ ở biến môi trường | 25/11 18:00 |
+| **D2-BE-03** CI + điền `docs/ACCOUNTS.md` (nợ G0: F1b, F1c) | backend-engineer | `.github/workflows/ci.yml`, `docs/ACCOUNTS.md` | CI xanh 1 lần (chạy `tests/test_kit_scripts.py` + `pytest apps/api`); mọi dòng `ACCOUNTS.md` hết trạng thái "chờ"; **không có secret nào trong repo** (quét trước khi commit) | 25/11 12:00 |
 | **D2-AI-01** Pipeline bước 1–3 | ai-engineer | `apps/api/app/analyzer/**`, `prompts/analyzer_v0.md` | 5 ảnh chụp tin nhắn thật → đọc được chữ, trích đúng STK/SĐT/tên miền, **`pii_mask` chạy trước mọi lần gọi LLM**; `grep` log không thấy STK/SĐT chưa mask | 25/11 15:00 |
 | **D2-AI-00** **Stub `analyze()`** (chặn đường cả BE và FE) | ai-engineer | `apps/api/app/analyzer/__init__.py` | Commit lên nhánh chung: `analyze(text: str\|None, image: bytes\|None, mime: str\|None) -> dict` trả **JSON mẫu đúng `analysis.schema.json`**; BE import được, FE lấy được JSON đó | **25/11 10:00 — cứng** |
 | **D2-AI-02** Output đúng schema + 3 dấu hiệu có trích dẫn | ai-engineer | `apps/api/app/analyzer/**`, `prompts/analyzer_v0.md` | 10/10 mẫu thử trả JSON validate schema; mỗi dấu hiệu có `quote` khớp đúng chuỗi trong đầu vào — **với ảnh là khớp văn bản đã đọc từ ảnh (OCR/vision)**; không khớp thì bỏ dấu hiệu | 25/11 19:00 |
 | **D2-FE-01** Ô nhập + nén ảnh + deploy Vercel | frontend-engineer | `apps/web/app/**`, `apps/web/components/**`, `apps/web/lib/**` | 1 ô nhập nhận **dán chữ + tải ảnh**, 1 nút chính "Kiểm tra", chữ ≥ 18px; **nén ảnh ở trình duyệt: cạnh dài ≤ 1600px, JPEG, rồi base64** — dán log kích thước trước/sau cho 1 ảnh điện thoại (phải < 5 MB); deploy Vercel, URL vào STATUS | 25/11 16:00 |
 | **D2-FE-02** Thẻ kết quả đọc JSON | frontend-engineer | `apps/web/components/**` | Hiển thị mức nguy cơ + 3 dấu hiệu + trích dẫn + câu hỏi kiểm chứng + **câu "Kết quả do AI phân tích và có thể sai…"**; đọc JSON mẫu không cần API; ảnh chụp khổ 390px | 25/11 20:00 |
-| **D2-QA-01** 70 mẫu dataset | eval-qa | `eval/dataset.jsonl`, `eval/raw-notes/**` | 70 dòng hợp lệ theo `.claude/skills/eval-harness/dataset-guide.md`, **≥ 10 mẫu có `image`**, đã ẩn danh; không mẫu nào chứa PII thật | 25/11 17:00 |
+| **D2-QA-01** 70 mẫu dataset (đã gộp mốc 50 mẫu của G0) | eval-qa | `eval/dataset.jsonl`, `eval/raw-notes/**` | 70 dòng hợp lệ theo `.claude/skills/eval-harness/dataset-guide.md`, **≥ 10 mẫu có `image`**, đã ẩn danh; không mẫu nào chứa PII thật | 25/11 17:00 |
+| **D2-QA-01a** 🚩 **Điều kiện của nhượng bộ F6** | eval-qa | `eval/dataset.jsonl` | **≥ 30 mẫu THẬT** (`synthetic: false`) đã nằm trong `dataset.jsonl` và báo trong nhóm. **Trượt mốc này → PM cắt phạm vi ngay trong buổi chiều**, không chờ 17:00 | **25/11 12:00 — cứng** |
+| **D2-QA-02a** `last_run.json` luôn được ghi | eval-qa | `.claude/skills/eval-harness/scripts/run_eval.py` | `run_eval.py` **luôn** ghi `eval/reports/last_run.json` dù đạt cổng hay không, dù có `--baseline` hay không; `latest.json` giữ nghĩa "lần đạt cổng gần nhất". Bằng chứng: 1 lần chạy trượt cổng vẫn sinh ra `last_run.json` + test mới pass | 25/11 15:00 |
+| **D2-QA-04** Mẫu thật cho G1.7 | eval-qa | `eval/dataset.jsonl`, `eval/raw-notes/**` | **≥ 2 mẫu thật** (không `synthetic`) gắn `scenario_id: "G1.7"` — mạo danh bệnh viện/nhà trường báo cấp cứu hoặc đóng phí gấp; đã ẩn danh | 25/11 17:00 |
 | **D2-QA-03** Test ảnh hỏng / quá cỡ | eval-qa | `eval/adversarial-d2.md` | 4 ca: ảnh 6 MB · `image/gif` · base64 hỏng · chỉ có `text: ""` → đều trả 4xx kèm thông báo tiếng Việt, **không ca nào trả `low`** | 25/11 21:00 |
 | **D2-QA-02** Eval baseline "không có AI" | eval-qa | `eval/reports/**` | `run_eval.py --baseline --tag baseline` chạy xong, báo cáo trong `eval/reports/`; dán bảng recall/báo nhầm làm mốc so sánh | 25/11 20:00 |
 | **D2-PM-01** Chốt hợp đồng + STATUS | pm-lead | `docs/TASKS.md`, `docs/STATUS.md` | BE + AI + FE xác nhận hợp đồng JSON base64 bằng tin nhắn trước 09:30; kiểm stub có mặt lúc 10:00; STATUS chốt trước 22:00 | 25/11 22:00 |
@@ -62,6 +66,8 @@ POST /v1/analyze   Content-Type: application/json
 413 → ảnh quá cỡ        · 415 → mime không hỗ trợ
 422 → thiếu cả hai đầu vào · 502 → analyzer lỗi
 ```
+
+Hai trường tùy chọn đã chốt (DECISIONS 2026-11-24): `locale` **tùy chọn, mặc định `"vi"`** — **thiếu `locale` không được trả 422** vì `run_eval.py` không gửi trường này; `url` **nhận nhưng chưa dùng đến ngày 3**. `audio_url` đã bỏ khỏi hợp đồng.
 
 ⚠️ **Mọi lỗi ảnh phải trả 4xx kèm thông báo tiếng Việt. TUYỆT ĐỐI không trả `risk_level: "low"` cho ảnh không đọc được** — người dùng sẽ hiểu là "an toàn" và chuyển tiền.
 

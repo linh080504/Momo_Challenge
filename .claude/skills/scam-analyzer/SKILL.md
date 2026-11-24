@@ -8,17 +8,20 @@ when_to_use: "Khi viết hoặc sửa prompt, đổi model LLM, thêm kịch b�
 
 ## Hợp đồng (không được phá vỡ)
 
-- Đầu vào: `{ "text"?: str, "image_base64"?: str, "image_mime"?: "image/png" | "image/jpeg", "audio_url"?: str, "url"?: str, "locale": "vi" }`
+- Đầu vào: `{ "text"?: str, "image_base64"?: str, "image_mime"?: "image/png" | "image/jpeg", "url"?: str, "locale"?: "vi" }`
   - Ảnh gửi trực tiếp trong thân JSON: `image_base64` là base64 của byte ảnh gốc (không có tiền tố `data:`), `image_mime` bắt buộc đi kèm và chỉ nhận `image/png` hoặc `image/jpeg`.
   - Ảnh tối đa **5 MB** (5 × 1024 × 1024 byte, tính trên byte ảnh gốc trước khi mã hóa base64). Ảnh vượt giới hạn hoặc sai định dạng → trả lỗi 4xx rõ ràng, **không** trả mức `low`.
   - `text` có thể rỗng khi có ảnh; nếu có thì là chữ người dùng gõ kèm, không phải bản chép lại nội dung ảnh.
+  - `locale` **tùy chọn**, mặc định `"vi"`. Thiếu `locale` KHÔNG được trả 422 — `run_eval.py` không gửi trường này (DECISIONS 2026-11-24).
+  - `url` **nhận nhưng chưa dùng đến ngày 3** (khi có `evidence-tools`). Trước đó: chấp nhận, không gây lỗi, không ảnh hưởng kết quả.
+  - `audio_url` **đã bỏ khỏi hợp đồng** — ghi âm nằm ở Could, không trong phạm vi vòng này (DECISIONS 2026-11-24).
   - Bộ eval (`run_eval.py`) gửi đúng dạng này: mẫu có trường `image` → `{"text", "image_base64", "image_mime"}`, mẫu chỉ có chữ → `{"text"}`.
 - Đầu ra: JSON đúng `analysis.schema.json` (cùng thư mục). Giao diện, bàn làm việc vận hành và bộ eval đều đọc schema này. Đổi schema = báo PM + sửa cả 3 nơi.
 - Endpoint: `POST /v1/analyze`. Thời gian trả lời mục tiêu: p95 ≤ 6 giây với đầu vào văn bản, p95 ≤ 12 giây với đầu vào ảnh (xem `docs/DECISIONS.md`, 2026-11-24).
 
 ## Pipeline 6 bước (prompt chaining có cổng kiểm tra)
 
-1. **Đọc**: ảnh → vision LLM chép lại nguyên văn chữ trong ảnh; QR → `/vietqr`; ghi âm → ASR (PhoWhisper hoặc API). Lưu văn bản gốc.
+1. **Đọc**: ảnh → vision LLM chép lại nguyên văn chữ trong ảnh; QR → `/vietqr`. Lưu văn bản gốc. *(Ghi âm → ASR: đã hạ xuống Could, không làm vòng này.)*
 2. **Trích thực thể bằng code trước, LLM sau**: số tài khoản, SĐT, URL, số tiền, ngân hàng, tổ chức được nhắc tới. Dùng regex của skill `pii-guard` rồi cho LLM bổ sung.
 3. **Ẩn danh**: chạy `pii-guard` → chỉ gửi văn bản đã mask lên LLM. Mapping giữ ở server.
 4. **Tra bằng chứng (code, song song)**: danh sách đen nội bộ theo hash, `domain_check.py`, Safe Browsing, QR có khớp người nhận được nhắc trong tin nhắn không. Xem skill `evidence-tools`.
