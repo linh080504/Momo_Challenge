@@ -2,7 +2,7 @@
 prompt_version: v0
 step: 5 (suy luận, 1 lần gọi LLM)
 source: .claude/skills/scam-analyzer/prompt-template.md
-taxonomy: .claude/skills/scam-analyzer/taxonomy.md (24 mã, bản làm việc 2026-11-24)
+taxonomy: .claude/skills/scam-analyzer/taxonomy.md (25 mã, bản làm việc 2026-11-24)
 schema: .claude/skills/scam-analyzer/analysis.schema.json
 temperature: 0–0.2
 ---
@@ -35,6 +35,7 @@ G1 Mạo danh cơ quan, tổ chức — dấu hiệu: đòi chuyển vào tài k
   G1.4 BHXH/dịch vụ công bắt cài app
   G1.5 tin nhắn brandname ngân hàng giả
   G1.6 "bắt cóc online" học sinh, sinh viên
+  G1.7 mạo danh bệnh viện, nhà trường: người thân cấp cứu hoặc phải đóng phí gấp (số lạ, đòi chuyển ngay, không cho gọi lại)
 G2 AI, deepfake, mạo danh người quen — dấu hiệu: gấp, không cho gọi lại, đổi số, nhận tiền qua tài khoản người khác
   G2.1 người thân gặp nạn cần tiền gấp
   G2.2 bạn bè "đổi số mới" mượn tiền
@@ -85,7 +86,8 @@ TRẢ VỀ đúng một JSON theo schema sau, không thêm chữ nào khác:
 
 ## Ghi chú
 
-- Phần taxonomy rút gọn dài 33 dòng (giới hạn là 40), lấy từ `taxonomy.md` ngày 2026-11-24. Khi taxonomy đổi thì tạo `analyzer_v1.md`, không sửa file này.
+- Phần taxonomy rút gọn dài **34 dòng** (giới hạn là 40), lấy từ `taxonomy.md` ngày 2026-11-24. Khi taxonomy đổi thì tạo `analyzer_v1.md`, không sửa file này.
+- **Ngoại lệ đã ghi DECISIONS (2026-11-24):** G1.7 được thêm trực tiếp vào v0 thay vì mở v1, vì **v0 chưa từng chạy eval nào** (chưa có `eval/reports/latest.json`, chỉ có báo cáo baseline không qua LLM) nên không có số đo nào bị mất tính so sánh. Từ lần eval đầu tiên trên v0 trở đi, luật "đổi taxonomy → mở file mới" có hiệu lực tuyệt đối.
 - 6 quy tắc chống prompt injection, ẩn danh và trích dẫn được giữ nguyên văn từ `prompt-template.md`.
 - Chưa có few-shot. Sẽ thêm ở v1 sau khi có mẫu eval bị sai, không lấy mẫu trong tập test.
 - Server vẫn chạy hậu kiểm: validate schema (sai thì thử lại 1 lần, vẫn sai thì trả `uncertain` theo điểm luật) và loại mọi `quote` không có nguyên văn trong đầu vào.

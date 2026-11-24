@@ -6,12 +6,15 @@ Các báo đăng lại chỉ nêu 5 nhóm, không liệt kê đủ 25 kịch b�
 **Đối chiếu nguồn (ngày tìm: 2026-11-24).** Đã đọc 3 bài:
 Báo Pháp luật VN – Doanh nhân (09/09/2026), Luật sư Việt Nam lsvn.vn (20/09/2026), CafeF (12/09/2026).
 Kết luận: **các nguồn chỉ công bố 5 nhóm**, mỗi nhóm vài ví dụ (khoảng 10–11 thủ đoạn), không đánh số, không có danh sách 25 kịch bản.
-Vì vậy giữ **24 mã hiện có làm bản làm việc**. Mọi thủ đoạn nêu trong nguồn đều đã có mã, trừ 2 trường hợp chưa có mã riêng: mạo danh bệnh viện (xếp tạm vào G1, `scenario_id` = null) và mạo danh nhà trường (gần nhất là G1.6).
+
+**Bản làm việc hiện tại: 25 mã = 24 mã cũ + G1.7**, bổ sung từ chính lần đối chiếu ngày 2026-11-24.
+Lần đối chiếu đó tìm ra 2 thủ đoạn chưa có mã riêng — mạo danh **bệnh viện** và mạo danh **nhà trường** — nay gộp thành một mã **G1.7**.
+Đây là **25 mã làm việc của đội**, KHÔNG phải bản sao danh sách 25 kịch bản của Công an TP Hà Nội (danh sách gốc vẫn chưa truy được).
 Khi tìm được văn bản gốc của Công an TP Hà Nội hoặc Bộ Công an thì đối chiếu lại.
 
 | Nhóm | Tên | Kịch bản con (mã) | Dấu hiệu chính | Câu hỏi kiểm chứng gợi ý |
 |---|---|---|---|---|
-| G1 | Mạo danh cơ quan, tổ chức | G1.1 công an/viện kiểm sát/tòa án báo liên quan vụ án; G1.2 nộp phạt nguội; G1.3 nợ cước viễn thông, cắt điện; G1.4 BHXH/dịch vụ công yêu cầu cài app; G1.5 brandname ngân hàng giả; G1.6 "bắt cóc online" học sinh, sinh viên | Cơ quan yêu cầu chuyển tiền vào tài khoản cá nhân; dọa; đòi giữ bí mật; gửi link/APK | "Cơ quan nhà nước có bao giờ làm việc qua Zalo và nhận tiền vào tài khoản cá nhân không?" · "Gọi lại số tổng đài in trên website chính thức chưa?" |
+| G1 | Mạo danh cơ quan, tổ chức | G1.1 công an/viện kiểm sát/tòa án báo liên quan vụ án; G1.2 nộp phạt nguội; G1.3 nợ cước viễn thông, cắt điện; G1.4 BHXH/dịch vụ công yêu cầu cài app; G1.5 brandname ngân hàng giả; G1.6 "bắt cóc online" học sinh, sinh viên; **G1.7 mạo danh bệnh viện, nhà trường báo người thân cấp cứu hoặc phải đóng phí gấp** | Cơ quan yêu cầu chuyển tiền vào tài khoản cá nhân; dọa; đòi giữ bí mật; gửi link/APK · **G1.7: số lạ, đòi chuyển ngay, không cho gọi lại** | "Cơ quan nhà nước có bao giờ làm việc qua Zalo và nhận tiền vào tài khoản cá nhân không?" · "Gọi lại số tổng đài in trên website chính thức chưa?" · **G1.7: "Gọi thẳng số của khoa (bệnh viện) hoặc phòng đào tạo (trường) lấy từ website chính thức chưa?"** |
 | G2 | AI, deepfake, deepvoice, mạo danh người quen | G2.1 người thân gặp nạn cần tiền gấp; G2.2 bạn bè "đổi số mới" mượn tiền; G2.3 video call giả lãnh đạo/sếp; G2.4 cuộc gọi thu mẫu giọng | Khẩn cấp + không cho gọi lại; đổi số; nhận tiền qua tài khoản người khác | "Gọi lại số cũ đã lưu chưa?" · "Hỏi một chuyện chỉ hai người biết" · "Gia đình có mật khẩu an toàn không?" |
 | G3 | Đầu tư tài chính, tuyển dụng | G3.1 việc nhẹ lương cao/CTV làm nhiệm vụ; G3.2 đầu tư chứng khoán, tiền số, ngoại hối cam kết lãi; G3.3 lãi suất "ưu đãi nội bộ" bất thường; G3.4 tình cảm rồi rủ đầu tư | Cho rút tiền nhỏ trước; cam kết lợi nhuận; nạp để "mở khóa" | "Có công ty nào trả tiền để bạn nạp tiền trước không?" · "Sàn có giấy phép ở Việt Nam không?" |
 | G4 | Mua bán, giao dịch trực tuyến | G4.1 bill chuyển khoản giả; G4.2 đặt cọc phòng, vé, hàng; G4.3 shipper giả thu phí; G4.4 trúng thưởng, quà tặng phải nộp phí; G4.5 hoàn tiền đơn hàng | Áp lực thời gian; tài khoản nhận là cá nhân khác tên shop; ảnh bill không khớp tiền về | "Tiền đã về tài khoản thật chưa (xem app ngân hàng, không xem ảnh)?" · "Tên chủ tài khoản có khớp tên shop?" |
