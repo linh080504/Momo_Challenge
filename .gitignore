@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+secrets/
+eval/raw/
+eval/holdout.jsonl
+node_modules/
+.venv/
+__pycache__/
+.next/
+dist/
+*.pyc
+.DS_Store
+.claude/settings.local.json

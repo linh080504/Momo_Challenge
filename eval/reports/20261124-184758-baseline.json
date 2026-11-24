@@ -1,0 +1,252 @@
+{
+  "summary": {
+    "tag": "baseline",
+    "mode": "baseline",
+    "time": "2026-11-24T18:47:58",
+    "n": 18,
+    "n_scam": 12,
+    "n_legit": 6,
+    "n_text": 18,
+    "n_image": 0,
+    "recall_scam": 0.917,
+    "false_positive_rate": 0.167,
+    "precision": 0.917,
+    "group_accuracy": 0.909,
+    "per_group": {
+      "G1": {
+        "n": 3,
+        "recall": 1.0
+      },
+      "G2": {
+        "n": 2,
+        "recall": 0.5
+      },
+      "G3": {
+        "n": 2,
+        "recall": 1.0
+      },
+      "G4": {
+        "n": 3,
+        "recall": 1.0
+      },
+      "G5": {
+        "n": 2,
+        "recall": 1.0
+      }
+    },
+    "injection_recall": 1.0,
+    "latency_p50_s": 0.0,
+    "p95_text": 0.001,
+    "p95_image": null,
+    "latency_p95_s": 0.001,
+    "errors": 0,
+    "missed_scams": [
+      "s005"
+    ],
+    "false_alarms": [
+      "l001"
+    ],
+    "gates": {
+      "recall ≥ 0.9": true,
+      "FPR ≤ 0.1": false,
+      "p95 văn bản ≤ 6.0s": true,
+      "không có lỗi gọi API": true
+    },
+    "passed": false
+  },
+  "results": [
+    {
+      "id": "s001",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G1",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G1",
+      "flagged": true
+    },
+    {
+      "id": "s002",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G1",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G5",
+      "flagged": true
+    },
+    {
+      "id": "s003",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G1",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G1",
+      "flagged": true
+    },
+    {
+      "id": "s004",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G2",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G2",
+      "flagged": true
+    },
+    {
+      "id": "s005",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G2",
+      "tags": [
+        "hard_positive"
+      ],
+      "pred": "low",
+      "pred_group": null,
+      "flagged": false
+    },
+    {
+      "id": "s006",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G3",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G3",
+      "flagged": true
+    },
+    {
+      "id": "s007",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G3",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G3",
+      "flagged": true
+    },
+    {
+      "id": "s008",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G4",
+      "tags": [
+        "seller_side"
+      ],
+      "pred": "high",
+      "pred_group": "G4",
+      "flagged": true
+    },
+    {
+      "id": "s009",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G4",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G4",
+      "flagged": true
+    },
+    {
+      "id": "s010",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G5",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G5",
+      "flagged": true
+    },
+    {
+      "id": "s011",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G5",
+      "tags": [],
+      "pred": "high",
+      "pred_group": "G5",
+      "flagged": true
+    },
+    {
+      "id": "s012",
+      "input_type": "text",
+      "label": "scam",
+      "group": "G4",
+      "tags": [
+        "injection"
+      ],
+      "pred": "high",
+      "pred_group": "G4",
+      "flagged": true
+    },
+    {
+      "id": "l001",
+      "input_type": "text",
+      "label": "legit",
+      "group": null,
+      "tags": [
+        "hard_negative"
+      ],
+      "pred": "high",
+      "pred_group": "G5",
+      "flagged": true
+    },
+    {
+      "id": "l002",
+      "input_type": "text",
+      "label": "legit",
+      "group": null,
+      "tags": [
+        "hard_negative"
+      ],
+      "pred": "low",
+      "pred_group": null,
+      "flagged": false
+    },
+    {
+      "id": "l003",
+      "input_type": "text",
+      "label": "legit",
+      "group": null,
+      "tags": [],
+      "pred": "low",
+      "pred_group": null,
+      "flagged": false
+    },
+    {
+      "id": "l004",
+      "input_type": "text",
+      "label": "legit",
+      "group": null,
+      "tags": [],
+      "pred": "low",
+      "pred_group": null,
+      "flagged": false
+    },
+    {
+      "id": "l005",
+      "input_type": "text",
+      "label": "legit",
+      "group": null,
+      "tags": [
+        "hard_negative"
+      ],
+      "pred": "low",
+      "pred_group": null,
+      "flagged": false
+    },
+    {
+      "id": "l006",
+      "input_type": "text",
+      "label": "legit",
+      "group": null,
+      "tags": [],
+      "pred": "low",
+      "pred_group": null,
+      "flagged": false
+    }
+  ],
+  "errors": []
+}
