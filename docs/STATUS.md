@@ -60,3 +60,39 @@ Người kiểm: gate-check (độc lập, chỉ tính bằng chứng chạy đ�
 | F7 | `.env.example` còn thiếu biến cho Must đã chốt: không có biến đăng nhập/2 tài khoản test (M6), không có URL API cho FE (ví dụ `NEXT_PUBLIC_API_URL`); `TELEGRAM_BOT_TOKEN` đã xuống Could | **backend-engineer** | Bổ sung khi dựng `apps/api`/`apps/web` ngày 2 |
 
 **Chặn đường:** F1 chặn mọi thứ — không có repo thì không có nhánh `feat/*`, không có PR, và **hợp đồng "commit stub `analyze()` lên nhánh chung trước 10:00 ngày 2" (`docs/TASKS.md` D2-AI-00) là không thể thực hiện**. Làm F1 trước tất cả.
+
+---
+
+## `/gate-check G0` (lần 2) — 2026-11-24 20:10 · KẾT LUẬN: **CHƯA ĐẠT** (1/4 tiêu chí PASS)
+
+Người kiểm: gate-check (độc lập, kiểm lại từ đầu, không tin lời tự báo cáo).
+**Thay đổi duy nhất so với lần 1 (19:57):** repo git đã được tạo và đẩy lên GitHub. Ba tiêu chí FAIL còn lại chưa có chuyển động nào.
+
+| Tiêu chí | PASS/FAIL | Bằng chứng |
+|---|---|---|
+| `docs/PRODUCT_BRIEF.md` đủ: vấn đề, persona, luồng chính, Must, chỉ số, ngoài phạm vi | **PASS** | Đọc file (163 dòng, mtime `19:47:20`): §1 vấn đề + 2 số liệu kèm link nguồn · §2 bảng 3 persona (P1 chính) · §3 luồng 6 bước BGK tự thử · §4 Must M1–M7, Should S1/S2, Could, **Won't** · §5 cổng số (recall ≥ 0.90, FPR ≤ 0.10, p95 văn bản ≤ 6s / ảnh ≤ 12s, ≥ 10 người thật) · §6 câu hỏi BTC · §7 rủi ro R1–R6 |
+| `.claude/skills/scam-analyzer/taxonomy.md` đã đối chiếu 25 kịch bản (hoặc ghi rõ chưa tìm được) | **FAIL** | `stat` → mtime **vẫn là `2026-11-24 18:09:21`** = giờ cài bộ kit, **không sửa lần nào trong ngày 1**. Dòng 5 vẫn nguyên văn bộ kit: "**Việc của ngày 1:** tìm thông báo gốc, đối chiếu và bổ sung đủ 25 mã kịch bản" → đây là việc còn treo, không phải kết luận "đã tìm, không ra". Đếm mã: G1=6, G2=4, G3=4, G4=5, G5=5 = **24 mã, thiếu 1**. `prompts/` vẫn không tồn tại → không có `prompts/analyzer_v0.md` (PLAN ngày 1, cột "Xong khi" của vai AI). |
+| Repo, CI, tài khoản dịch vụ đã tạo; `.env.example` có đủ biến | **FAIL** (repo đã xong, CI + tài khoản chưa) | **Repo: PASS** — `git remote -v` → `origin https://github.com/linh080504/Momo_Challenge.git`; commit `1165717 chore: AI team kit + docs ngay 1`; `git status -sb` → `## main...origin/main` (đã đồng bộ); `git ls-remote --heads origin` → `refs/heads/main 1165717…`; 53 file được theo dõi. **CI: FAIL** — không có `.github/`; `find` toàn repo (trừ `.git`) **không thấy một file `*.yml`/`*.yaml`/`*.toml`/`package.json`/`requirements*.txt` nào** → chưa có workflow nào, và cũng chưa có project để CI build. **Tài khoản dịch vụ: FAIL** — không có bằng chứng ở bất kỳ đâu: `grep -i` trong `docs/` chỉ ra các dòng *kế hoạch* (PLAN/TASKS) về Vercel/Supabase/Safe Browsing, không có URL, không có dòng "đã lấy key", không có `apps/`, `infra/`. **`.env.example`: gần đủ** — 9 biến, phủ đúng 8 biến mà `.claude/skills/deploy-runbook/SKILL.md:19` yêu cầu + `ANALYZER_URL`; **thiếu `NEXT_PUBLIC_API_URL`** (chính runbook đó yêu cầu ở bước setup #2) và thiếu biến cho 2 tài khoản test của M6. |
+| ≥ 50 mẫu dữ liệu đầu tiên (đã ẩn danh) trong `eval/` | **FAIL** | `eval/` chỉ có `dataset.example.jsonl` + `reports/`. **`eval/dataset.jsonl` không tồn tại.** Phân tích file mẫu: **18 dòng** (12 scam / 6 legit), `source: synthetic-example` 18/18, `synthetic: true` 18/18, **0 mẫu ảnh**, mtime `18:09:20` → đây là file mẫu của bộ kit, không phải dữ liệu đội thu. 18 < 50. Không có `eval/raw-notes/`, không có `eval/images/`. |
+
+**Bằng chứng phụ (đã tự chạy lại):**
+- `py -3 tests/test_kit_scripts.py` → **16/16 OK, exit 0**. Đúng như eval-qa báo.
+- `eval/reports/20261124-184758-baseline.md` có thật: recall 0.917 · **FPR 0.167 (trượt cổng ≤ 0.10)** · p95 văn bản 0.001s (n=18) · **p95 ảnh n=0** · tự kết luận "CHƯA ĐẠT". Số này chạy trên 18 mẫu mẫu nên không dùng được làm số đo lần 1 của G1.
+- **`eval/reports/latest.json` vẫn chưa tồn tại** → `/gate-check G2` (đọc `p95_text`/`p95_image` trong `latest.json`) hiện không có nguồn số. `run_eval.py` chỉ ghi `latest.json` khi đạt cổng và không chạy `--baseline`.
+- `docs/DECISIONS.md` (mtime 19:47, 22 dòng quyết định) **không có dòng nào** cho phép dồn mốc "50 mẫu của G0" sang ngày 2 → F6 của lần kiểm trước vẫn mở.
+
+**Việc phải làm cho từng FAIL (cập nhật từ lần 1)**
+
+| # | Việc cụ thể | Người phụ trách | Xong khi |
+|---|---|---|---|
+| F1a | ~~`git init` + remote GitHub~~ ✅ **XONG** — `origin` + commit `1165717` đã đẩy lên `main` | backend-engineer / PM | — |
+| F1b | Thêm `.github/workflows/ci.yml` chạy `python tests/test_kit_scripts.py` trên push/PR (bổ sung `pytest apps/api` khi có code); bật bảo vệ nhánh `main` + yêu cầu PR như `deploy-runbook` bước setup #1 | **backend-engineer** | Dán link 1 lần CI xanh vào STATUS |
+| F1c | Tạo và xác nhận tài khoản dịch vụ (LLM + model dự phòng, Google Safe Browsing, Supabase region Singapore, Vercel, nền tảng API) → dán vào STATUS bằng chứng "key đã lấy được" (ví dụ: tên project + thời điểm tạo, **không dán giá trị key**) | **backend-engineer** | STATUS có 5 dòng xác nhận tài khoản |
+| F2 | Taxonomy: tìm thông báo gốc 25 kịch bản (Công an TP Hà Nội 09/2026), bổ sung đủ 25 mã. **Nếu không truy được bản gốc: xóa dòng 5 và ghi thẳng** "đã tìm ngày 1 (liệt kê nguồn đã thử), không truy được bản gốc; 24 mã dưới đây do đội tổng hợp" | **ai-engineer** | `taxonomy.md` có mtime ngày 1 và một trong hai: đủ 25 mã, hoặc câu kết luận đã tìm không ra kèm nguồn |
+| F3 | Viết `prompts/analyzer_v0.md` từ `.claude/skills/scam-analyzer/prompt-template.md`, nhúng taxonomy rút gọn (đầu vào của D2-AI-00/02) | **ai-engineer** | File tồn tại, chạy thử được với 1 mẫu |
+| F4 | `eval/dataset.jsonl` ≥ 50 dòng hợp lệ theo `dataset-guide.md`, đã ẩn danh (`pii_mask.py` sạch), ghi chú gốc để ở `eval/raw-notes/`; **kèm ≥ 20 mẫu ảnh theo §5.1 brief** (có thể dồn sang mốc 100 mẫu nhưng phải ghi rõ) | **eval-qa** | `wc -l eval/dataset.jsonl` ≥ 50 + `run_eval.py --baseline` chạy được trên file đó |
+| F5 | 3 màn tĩnh Next.js chạy local (`apps/web`) — PLAN ngày 1, `apps/` vẫn chưa tồn tại | **frontend-engineer** | `npm run dev` mở được 3 màn, ảnh chụp khổ 390px |
+| F6 | **Vẫn mở:** nếu chấp nhận dồn mốc 50 mẫu của G0 sang `D2-QA-01` (70 mẫu, 25/11 17:00) thì ghi một dòng vào `docs/DECISIONS.md`; không im lặng bỏ qua | **pm-lead** | Có dòng DECISIONS hoặc F4 xong |
+| F7 | `.env.example`: thêm `NEXT_PUBLIC_API_URL` (deploy-runbook setup #2) và biến cho 2 tài khoản test của M6; `TELEGRAM_BOT_TOKEN` đã xuống Could — ghi chú "chưa dùng vòng này" | **backend-engineer** | File có đủ biến khi dựng `apps/api`/`apps/web` |
+
+**Chặn đường mới:** repo đã mở nên hợp đồng "commit stub `analyze()` trước 10:00 ngày 2" (`docs/TASKS.md` D2-AI-00) đã khả thi. Chặn đường còn lại là **F1c (tài khoản dịch vụ)** — không có key LLM thì mốc 14:00 ngày 2 "URL API staging" chỉ trả được stub, và **F4** — không có dữ liệu thật thì số đo lần 1 của G1 sẽ vẫn chạy trên mẫu tổng hợp.
