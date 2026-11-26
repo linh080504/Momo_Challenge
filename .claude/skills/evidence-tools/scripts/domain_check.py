@@ -116,8 +116,8 @@ def check(url: str, use_rdap: bool = False) -> dict:
     label = reg.split(".")[0]
     tld = host.rsplit(".", 1)[-1] if "." in host else ""
 
-    if reg in OFFICIAL:
-        add("official", -40, f"Khớp tên miền chính thức của {OFFICIAL[reg]}")
+    if reg in OFFICIAL or host.endswith(".gov.vn"):  # .gov.vn chỉ cấp cho cơ quan nhà nước (DECISIONS 2026-11-26)
+        add("official", -40, f"Khớp tên miền chính thức của {OFFICIAL.get(reg, 'cơ quan nhà nước (.gov.vn)')}")
     else:
         if "@" in u.netloc:
             add("at_sign", 30, "Có ký tự @ trong phần tên miền (kỹ thuật che giấu địa chỉ thật)")
