@@ -4,7 +4,7 @@ COPY apps/api/tools/media/package*.json ./
 COPY apps/api/tools/media/prepare.cjs ./
 RUN npm ci --omit=dev
 
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm AS runtime
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-vie \
@@ -25,3 +25,21 @@ WORKDIR /srv/apps/api
 USER tkc
 EXPOSE 8000
 CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-access-log"]
+
+FROM debian:bookworm-slim AS whisper-build
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git cmake g++ make \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git clone --depth 1 --branch v1.9.6 https://github.com/ggml-org/whisper.cpp.git whisper
+RUN cmake -S whisper -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+    -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
+    && cmake --build build --target whisper-cli --parallel 4
+
+FROM runtime AS speech
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=whisper-build /src/build/bin/whisper-cli /usr/local/bin/whisper-cli
+USER tkc
+
+FROM runtime AS default

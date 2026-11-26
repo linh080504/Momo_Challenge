@@ -1,13 +1,18 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 
 class AnalyzeIn(BaseModel):
-    text: str = Field(default="", max_length=12000)
-    image_base64: str | None = None
-    image_mime: str | None = None
-    url: str | None = Field(default=None, max_length=2000)
+    text: str = Field(default="", max_length=12000, description="Tin nhắn hoặc nội dung đi kèm.")
+    image_base64: str | None = Field(default=None, description="Ảnh PNG/JPEG dạng Base64, tối đa 5 MiB trước mã hóa.")
+    image_mime: str | None = Field(default=None, description="image/png hoặc image/jpeg, đi cùng image_base64.")
+    image_kind: Literal["image", "receipt"] = Field(default="image", description="Ảnh chụp hoặc ảnh gốc biên lai.")
+    audio_base64: str | None = Field(
+        default=None, description="WAV PCM mono 16 bit, 16 kHz dạng Base64. Tối đa 45 giây, dùng thay ảnh đính kèm.",
+    )
+    qr_payload: str | None = Field(default=None, max_length=2000, description="Nội dung QR đã giải mã, dạng HTTP(S) hoặc VietQR.")
+    url: str | None = Field(default=None, max_length=2000, description="Địa chỉ web cần đối chiếu tên miền.")
     locale: Literal["vi"] = "vi"
 
 
@@ -34,6 +39,38 @@ class ReviewIn(BaseModel):
     revision: int = Field(gt=0)
 
 
-class QrIn(AnalyzeIn):
+class QrIn(BaseModel):
+    text: str = Field(default="", max_length=12000, description="Tin nhắn đi kèm để đối chiếu người nhận hoặc đường link.")
+    image_base64: str | None = Field(default=None, description="Ảnh QR PNG/JPEG dạng Base64, tối đa 5 MiB trước mã hóa.")
+    image_mime: str | None = Field(default=None, description="image/png hoặc image/jpeg, đi cùng image_base64.")
     payload: str | None = Field(default=None, max_length=1024)
     confirmed: bool = False
+
+
+class QrLinkResult(BaseModel):
+    kind: Literal["url"]
+    host: str
+    level: Literal["low", "medium", "high"]
+    signals: list[str]
+    domain_age_days: int | None
+    threat_intel_checked: bool
+    threat_intel_match: bool
+    confirmed_alert: bool
+    risk: Literal["high", "medium", "uncertain"]
+    disclaimer: str
+
+
+class QrPaymentResult(BaseModel):
+    kind: Literal["payment"]
+    bank: str | None
+    bank_bin: str
+    account: str
+    amount: str | None
+    valid_crc: bool
+    mismatch: bool
+    confirmed_alert: bool
+    risk: Literal["low", "medium", "high", "uncertain"]
+    disclaimer: str
+
+
+QrResult = Annotated[QrLinkResult | QrPaymentResult, Field(discriminator="kind")]

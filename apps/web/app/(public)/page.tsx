@@ -15,7 +15,7 @@ const signs = [
 ];
 
 const steps = [
-  { title: "Gửi nội dung", text: "Dán tin nhắn, link hoặc tải ảnh chụp." },
+  { title: "Gửi nội dung", text: "Dán tin nhắn, link hoặc tải ảnh, biên lai và bản ghi âm." },
   { title: "Đọc và che thông tin", text: "Đọc chữ trong ảnh trên máy chủ và che dữ liệu nhạy cảm trước khi phân tích." },
   { title: "Đối chiếu dấu hiệu", text: "Kiểm tra các dấu hiệu trong nội dung, tên miền và cảnh báo đã được duyệt." },
   { title: "Xác minh trước khi trả", text: "Xem mức rủi ro, các đoạn trích và câu hỏi kiểm chứng." },
@@ -23,7 +23,7 @@ const steps = [
 
 const questions = [
   { question: "Nếu kết quả báo nguy cơ cao thì làm gì?", answer: "Hãy tạm dừng chuyển tiền. Liên hệ người nhận hoặc đơn vị liên quan qua số điện thoại hoặc ứng dụng chính thức mà bạn tự tìm được." },
-  { question: "Tôi có thể gửi những gì để kiểm tra?", answer: "Bạn có thể dán tin nhắn, đường link hoặc tải ảnh chụp PNG/JPEG. Dùng mục VietQR nếu cần đối chiếu mã chuyển khoản." },
+  { question: "Tôi có thể gửi những gì để kiểm tra?", answer: "Bạn có thể dán tin nhắn, đường link hoặc tải ảnh chụp và biên lai PNG/JPEG. Bản ghi âm cần Whisper trên máy chủ. Dùng mục kiểm tra QR cho mã liên kết và VietQR." },
   { question: "Ảnh và thông tin cá nhân được xử lý thế nào?", answer: "Ảnh được đọc trên máy chủ của ứng dụng. Bạn nên che thông tin riêng tư không cần thiết trước khi tải lên. Khi báo cáo, đội vận hành nhận các tín hiệu đã che để đối chiếu." },
   { question: "Báo cáo có tác dụng gì?", answer: "Chuyên viên có thể xem và gom báo cáo liên quan. Sau khi được duyệt, cảnh báo sẽ xuất hiện khi người khác kiểm tra nội dung trùng thông tin." },
   { question: "Tôi có thể gửi kết quả cho người thân không?", answer: "Chọn Hỏi người thân ở thẻ kết quả để tạo đường dẫn tóm tắt đã che thông tin, có hiệu lực 24 giờ." },
@@ -99,7 +99,7 @@ export default function Home() {
         <div className="shell landing-section landing-check-grid">
           <div className="landing-check-copy">
             <h2 id="check-heading">Kiểm tra nội dung</h2>
-            <p>Dán thông tin bạn nhận được hoặc tải ảnh chụp để xem dấu hiệu rủi ro và câu hỏi kiểm chứng.</p>
+            <p>Dán thông tin hoặc tải tệp để xem dấu hiệu rủi ro và cách kiểm chứng.</p>
             <ul>
               <li><LockKeyhole size={19} aria-hidden="true" />Che dữ liệu riêng tư không cần thiết trước khi tải ảnh.</li>
               <li><BadgeCheck size={19} aria-hidden="true" />Dùng trích dẫn để đối chiếu với tin nhắn gốc.</li>

@@ -1,0 +1,14 @@
+services:
+  api:
+    build:
+      target: speech
+    environment:
+      WHISPER_COMMAND: /usr/local/bin/whisper-cli
+      WHISPER_MODEL_PATH: /models/whisper.bin
+    volumes:
+      - type: bind
+        source: ${PAYPAUSE_WHISPER_MODEL_FILE:?Set the path of the local GGML Whisper artifact}
+        target: /models/whisper.bin
+        read_only: true
+        bind:
+          create_host_path: false

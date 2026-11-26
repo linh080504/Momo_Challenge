@@ -1,17 +1,15 @@
 import re
-from urllib.parse import urlsplit
-
-from ..kit import domain_check, pii_mask
+from ..evidence.url_gateway import inspect_url
+from ..kit import pii_mask
 
 URL = re.compile(
-    r"https?://[^\s<>\"']+|(?<![\w@.])(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+"
-    r"(?:[a-z]{2,})(?=[/?:\s,.)!?;]|$)(?:/[^\s<>\"']*)?", re.I
+    r"https?://[^\s<>\"']+|(?<![\w@.])(?:[^\W_](?:[^\W_]|-){0,62}[.。．｡])+"
+    r"(?:[a-z]{2,}|xn--[a-z0-9-]+)(?=[/?:\s,.)!?;]|$)(?:[/:?][^\s<>\"']*)?", re.I
 )
 ACCOUNT = re.compile(
     r"\b(?:stk|số tài khoản|tài khoản (?:nhận|tạm giữ|cá nhân))\s*[:#-]?\s*([0-9]{6,19})(?!\d)",
     re.I,
 )
-HOST = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+")
 
 
 def extract(text, supplied_url, signer):
@@ -38,18 +36,14 @@ def extract(text, supplied_url, signer):
             break
         candidate = raw.strip().rstrip(".,)!?;")
         try:
-            parsed = urlsplit(candidate if "://" in candidate else "http://" + candidate)
-            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-                continue
-            result = domain_check.check(candidate)
-            host = result["host"].rstrip(".").encode("idna").decode()
+            result = inspect_url(candidate)
         except (ValueError, UnicodeError):
             continue
         signals = {signal["signal"] for signal in result["signals"]}
-        if not HOST.fullmatch(host) and "ip_url" not in signals:
-            continue
-        domains[host] = result
+        host = result["host"]
+        if host not in domains or result["score"] > domains[host]["score"]:
+            domains[host] = result
         # Avoid approving an entire official service or a shared shortener.
-        if not signals.intersection({"official", "shortener", "ip_url"}):
+        if result["lookup_allowed"] and not signals.intersection({"official", "shortener"}):
             add("URL", host, "Đã trích tên miền")
     return keys, entities, domains

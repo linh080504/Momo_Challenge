@@ -11,14 +11,18 @@ async function main() {
     process.stdout.write(qr?.data || "");
     return;
   }
-  if (mode !== "ocr") throw new Error("Unknown media operation");
+  if (mode !== "ocr" && mode !== "ocr-tsv") throw new Error("Unknown media operation");
   const { createWorker, PSM } = require("tesseract.js");
   const langPath = path.join(__dirname, "node_modules", ".tkc-tessdata");
   const worker = await createWorker("vie+eng", 1, { langPath, cacheMethod: "none", gzip: true });
   try {
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
-    const { data } = await worker.recognize(image);
-    process.stdout.write(data.text);
+    const { data } = await worker.recognize(image, {}, { text: mode === "ocr", tsv: mode === "ocr-tsv" });
+    if (mode === "ocr-tsv") {
+      process.stdout.write("level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n" + (data.tsv || ""));
+    } else {
+      process.stdout.write(data.text || "");
+    }
   } finally {
     await worker.terminate();
   }

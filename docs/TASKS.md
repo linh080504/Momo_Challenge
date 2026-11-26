@@ -92,3 +92,63 @@ Hai trường tùy chọn đã chốt (DECISIONS 2026-11-24): `locale` **tùy ch
 ## Các ngày sau
 
 Xem `docs/PLAN.md` (đã nhúng 7 task phát sinh từ brief vào ngày 1, 3, 4, 9, 11). File này chỉ chia chi tiết cho ngày đang chạy và ngày kế tiếp; PM cập nhật mỗi tối sau standup.
+
+## Công việc nâng cấp PayPause AI
+
+Các hàng dưới đây là đầu việc của phiên bản nâng cấp. Vai trong cột Chủ chịu trách nhiệm điều phối và chia tiếp việc thành PR nhỏ. Thực hiện theo thứ tự phụ thuộc. [Lộ trình sáu tầng](PLAN.md#lộ-trình-nâng-cấp-paypause-ai)
+
+| Mã | Chủ | Việc cần làm | Phụ thuộc | Bằng chứng hoàn thành |
+|---|---|---|---|---|
+| U-01 | eval-qa | Tạo bộ dữ liệu SMS/chat, URL, QR, ảnh, ghi âm và biên lai tiếng Việt. Ghi nguồn, quyền dùng, lớp sạch/gian lận, chiến dịch và vùng bằng chứng. | Quyền dữ liệu và người gán nhãn | Manifest dataset, phân bố lớp, kiểm tra dữ liệu nhạy cảm và holdout tách theo chiến dịch/tên miền/người nói hoặc mẫu biên lai. |
+| U-02 | backend-engineer | Khóa baseline local và staging, chuẩn hóa cấu hình Qwen, Safe Browsing, RDAP, PostgreSQL và vai demo. | Tài khoản và hạn mức dịch vụ | Smoke test có phiên bản mã, cấu hình, provider, p95 theo loại đầu vào và kết quả khi mất kết nối. |
+| U-03 | security-reviewer | Rà ứng dụng kiểm tra URL/QR, quy tắc egress, ranh giới LLM, dữ liệu HMAC và quyền truy cập lưu trữ. | U-02 | Các ca kiểm thử xác nhận dữ liệu thô được giữ trong luồng xử lý phù hợp, endpoint ngoài được cố định và vai người dùng không mở được chức năng vận hành. |
+| U-04 | ai-engineer | Huấn luyện FraudURL-LightGBM trên tập đã xác minh, so sánh XGBoost, đo recall, báo nhầm và Brier score. Thử nạp artifact đạt yêu cầu. | U-01 | So sánh có holdout tách tên miền, manifest và checksum trùng artifact đã thử. |
+| U-05 | ai-engineer | Tạo ứng viên FraudBERT-VN đa nhiệm. Xuất PhoBERT sang ONNX INT8 và so sánh với bản gốc. | U-01 có nhãn thủ đoạn và vùng chữ | Báo cáo sai khác chất lượng cho ba đầu ra, độ trễ CPU và kích cỡ artifact. |
+| U-06 | ai-engineer | Chạy Whisper `large-v3-turbo` và benchmark AASIST/XLS-R cho FraudVoice-VN. | U-01 có bản ghi được phép dùng, máy chạy Whisper | Đo WER theo nhóm giọng và độ nhiễu, thêm recall và báo nhầm riêng cho phát hiện giả mạo giọng. |
+| U-07 | ai-engineer | So sánh OCR hiện tại với PP-OCRv5, PP-OCRv6 và PaddleOCR-VL. Benchmark FraudDoc-VN với DTD/DocTamper, OpenCV và dữ liệu biên lai. | U-01 có cặp nguyên bản, ảnh nén và vùng chỉnh sửa | Có bảng so sánh OCR tiếng Việt, chất lượng định vị vùng, tỷ lệ báo nhầm trên ảnh nén và p95. |
+| U-08 | ai-engineer | Thử Qwen3-VL-8B, Gemini 2.5 Flash, FraudLLM Qwen3-8B/QLoRA và Vietnam Scam RAG với BGE-M3 cùng reranker. Đánh giá router theo đầu vào và độ tin cậy. | U-01, U-02, kết quả U-06 và U-07 | Có trường hợp truy xuất đúng nguồn, trường hợp thiếu bằng chứng và kết quả fallback. Đo chi phí, p95 và lượng gọi Deep Path. |
+| U-09 | backend-engineer | Mở rộng đồ thị chiến dịch với nguồn và độ tin cậy của quan hệ. Thử FraudFusion-ML trên nhóm tín hiệu độc lập. | U-01, U-04 và tín hiệu đã benchmark | Đo gộp/tách nhầm, xác suất đã hiệu chuẩn và tác động khi một nguồn vắng mặt. |
+| U-10 | frontend-engineer | Nâng `/ops` cho điều tra đa tác nhân, đọc nguồn và ưu tiên hồ sơ. Hiển thị ảnh gốc, vùng OCR, vùng cần xem lại và trạng thái xác minh giao dịch. | U-07, U-09 | Kịch bản người dùng và chuyên viên hoàn tất trên màn hình 390px và 1280px. |
+| U-11 | backend-engineer | Tích hợp gửi cảnh báo sau duyệt theo quyền, ghi audit, chống gửi trùng và xây adapter đối chiếu giao dịch khi có đối tác. | Tài khoản, quyền truy cập và nghiệm thu U-03 | Kiểm thử chỉ cảnh báo đã duyệt được gửi, có nhật ký người duyệt. Giao dịch chỉ được xác minh với bằng chứng từ nguồn đã cấp quyền. |
+| U-12 | eval-qa | Tạo hàng đợi active learning, tách mẫu xin nhãn khỏi dữ liệu đã xác minh, quản lý phiên bản và cổng đánh giá trước phát hành. | U-01 và phản hồi hợp lệ từ `/v1/ops/feedback` | Truy lại được mẫu, nhãn và báo cáo theo phiên bản model. Thử kích hoạt và quay lui một ứng viên trên staging. |
+| U-13 | pm-lead | Chạy thử người dùng và đo bàn vận hành theo Product Brief, chốt phạm vi demo và phát hành. | U-02, các nhánh đã qua eval và bộ kịch bản nghiệm thu | Kết quả thực tế, lỗi mở và điều kiện phát hành được ghi trong `USER_TESTS.md` và `STATUS.md`. |
+
+### Ánh xạ các bước vào repo
+
+Số bước tương ứng với [Kế hoạch xây dựng từng bước](PLAN.md#kế-hoạch-xây-dựng-từng-bước). Cột Chủ ghi vai chịu trách nhiệm chính. Nhóm theo loại đầu vào có thể làm song song sau khi chốt hợp đồng và dữ liệu đánh giá của nhóm đó.
+
+| Bước | Chủ | Task liên quan | Thư mục hoặc tài liệu cần làm việc |
+|---|---|---|---|
+| 1. Luồng và hợp đồng | PM + BE | U-02, U-10 | `docs/PRODUCT_BRIEF.md`, `apps/api/app/schemas/`, `apps/api/app/api/`, `apps/web/lib/api.ts` |
+| 2. Môi trường và baseline | BE | U-02 | `.env.example`, `compose.yaml`, `infra/deploy/`, `infra/supabase/`, `eval/reports/` |
+| 3. Cổng bảo mật | BE + security-reviewer | U-03 | `apps/api/app/evidence/`, `apps/api/app/privacy/`, `apps/api/app/qr/`, `apps/api/app/auth/`, `apps/api/tests/` |
+| 4. Dữ liệu và nội dung | QA + PM | U-01 | `eval/`, `prompts/`, `docs/PRODUCT_BRIEF.md`, `docs/USER_TESTS.md` |
+| 5. Sáu đầu vào và giao diện | FE + BE | U-06, U-07, U-10 | `apps/web/app/`, `apps/web/components/analysis/`, `apps/web/lib/`, `apps/api/app/analyzer/providers/`, `tests/e2e/` |
+| 6. Mô hình chuyên biệt | AI + QA | U-04, U-05, U-06, U-07 | `eval/train_fraud_url.py`, `apps/api/app/analyzer/providers/`, `eval/` |
+| 7. Pháp y ảnh và chất lượng nghe nhìn | AI + QA | U-06, U-07, U-10 | `apps/api/app/analyzer/pipeline/`, `apps/api/app/analyzer/providers/`, `apps/web/components/analysis/`, `eval/` |
+| 8. Suy luận sâu và RAG | AI | U-08 | `apps/api/app/analyzer/`, `prompts/` |
+| 9. Đồ thị và điểm rủi ro | BE + AI | U-09 | `apps/api/app/db/`, `apps/api/app/reports/`, `apps/api/app/ops/`, `apps/api/app/analyzer/`, `eval/` |
+| 10. Tác nhân và duyệt | FE + BE | U-10 | `apps/web/components/ops/`, `apps/api/app/ops/`, `apps/api/app/api/`, `tests/e2e/` |
+| 11. Cảnh báo và xác minh | BE + chủ dịch vụ | U-11 | `apps/api/app/api/`, `apps/api/app/ops/`, `infra/`, `docs/ACCOUNTS.md` |
+| 12. Hàng đợi phản hồi | QA + BE | U-12 | `apps/api/app/reports/`, `apps/api/app/db/`, `eval/` |
+| 13. Phiên bản model | AI + QA | U-12 | `apps/api/app/analyzer/providers/`, `eval/`, `infra/deploy/` |
+| 14. Nghiệm thu và pilot | QA + PM | U-13 | `tests/e2e/`, `eval/reports/`, `docs/USER_TESTS.md`, `submission/` |
+| 15. Phát hành và bàn giao | BE + PM | U-02, U-11, U-13 | `infra/deploy/`, `docs/STATUS.md`, `docs/ACCOUNTS.md`, `submission/` |
+
+Model, dataset riêng và giá trị secret thuộc môi trường lưu trữ đã cấp quyền.
+
+### Gói triển khai đầu tiên
+
+1. **Bước 1 · PM và BE.** Dùng schema hiện tại lập ma trận sáu đầu vào gồm trường gửi, bước trích xuất, dạng bằng chứng, giới hạn, lỗi và màn hình. Đưa một ca kiểm tra hợp lệ và một ca lỗi cho mỗi luồng vào danh sách nghiệm thu.
+2. **Bước 2 · BE và QA.** Chạy lại smoke local trên bản nâng cấp, ghi phiên bản và nhà cung cấp thực tế. Dùng kết quả đó làm mốc khi dựng staging. Xác minh vai user/ops và test PostgreSQL trong môi trường thử.
+3. **Bước 4 · QA và PM, chuẩn bị song song.** Chốt hướng dẫn gán nhãn và lấy mẫu sạch/gian lận đầu tiên. Ưu tiên tập URL tách tên miền để mở đường cho U-04. Ghi mẫu tổng hợp riêng với mẫu đã xác minh.
+
+Khi hợp đồng và smoke baseline đã có bằng chứng, tiếp tục kiểm tra cổng bảo mật ở bước 3 trong khi đội dữ liệu hoàn thiện tập đánh giá. Ghi đầu ra, lỗi mở và người chịu trách nhiệm sau mỗi gói vào [STATUS.md](STATUS.md).
+
+### Việc mở sau staging local
+
+- **U-01 · QA.** Tiếp nhận dữ liệu đã ẩn danh, ghi quyền sử dụng, xác minh nhãn và khóa holdout. Ưu tiên cặp tập URL `phishing`/`benign` để mở U-04 và bản ghi tiếng Việt kèm tham chiếu để mở benchmark ASR.
+- **U-03 · BE và người phụ trách bảo mật.** Xác minh Safe Browsing với khóa của môi trường đích và kiểm tra chính sách mạng/lưu trữ trên hạ tầng staging từ xa.
+- **U-04 · AI.** Khi có dữ liệu đã duyệt, đánh giá FraudURL theo holdout tách tên miền. Dùng kết quả smoke sáu đầu vào làm ca hồi quy kỹ thuật cho định tuyến và hiệu chuẩn, giữ cổng đánh giá chính thức theo Product Brief.
+
+[Tiến độ các bước và kết quả đo](STATUS.md#tiến-độ-thực-hiện-15-bước)

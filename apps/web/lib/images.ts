@@ -1,5 +1,20 @@
 import type { Input } from "./api";
 
+export function readBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",", 2)[1]);
+    reader.onerror = () => reject(new Error("Không đọc được tệp."));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function receiptInput(file: File): Promise<Input["image_base64"]> {
+  if (!["image/png", "image/jpeg"].includes(file.type)) throw new Error("Hãy chọn ảnh biên lai PNG hoặc JPEG.");
+  if (file.size > 5 * 1024 * 1024) throw new Error("Ảnh biên lai gốc phải nhỏ hơn 5 MB.");
+  return readBase64(file);
+}
+
 export async function imageInput(file: File): Promise<Pick<Input, "image_base64" | "image_mime">> {
   if (!["image/png", "image/jpeg"].includes(file.type)) {
     throw new Error("Hãy chọn ảnh PNG hoặc JPEG.");

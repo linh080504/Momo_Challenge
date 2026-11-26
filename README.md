@@ -25,6 +25,24 @@ npm.cmd run dev --prefix apps/web
 - Hai tài khoản demo local có trong `.env` vừa tạo. Đăng nhập vai người dùng để báo cáo. Đăng nhập vai vận hành trong cửa sổ riêng để duyệt. Kiểm tra lại nội dung trùng số tài khoản, số điện thoại hoặc tên miền để thấy cảnh báo đã xác nhận.
 - Có thể dùng `docker compose up --build` sau khi tạo `.env`. Compose chạy API và web trên máy, lưu DB trong volume riêng.
 - Đặt `LLM_BASE_URL` (tới gốc API tương thích Chat Completions, thường kết thúc bằng `/v1`), `LLM_API_KEY`, `LLM_MODEL`, `LLM_FALLBACK_MODEL` và `SAFE_BROWSING_KEY` nếu có tài khoản dịch vụ. Chế độ hạn chế dùng luật và dữ liệu nội bộ. Google Safe Browsing chỉ đối chiếu tên miền gốc, với độ phủ giới hạn theo tên miền.
+- Đặt `DASHSCOPE_API_KEY` để dùng Qwen4-Max qua QwenCloud Singapore khi `LLM_BASE_URL` và `LLM_MODEL` để trống.
+
+### Kiến trúc PayPause AI sau nâng cấp
+
+| Tầng | Đã có trong ứng dụng | Hạng mục phát triển tiếp |
+| --- | --- | --- |
+| 1. Security & Trust Gateway | Kiểm tra kích thước, định dạng, URL và QR. Chuẩn hóa IDN, đối chiếu thương hiệu, phát hiện ký tự giống nhau và kiểm tra CRC VietQR. Đối chiếu thực thể lưu dạng HMAC với hồ sơ đã duyệt. Safe Browsing và RDAP chỉ nhận tên miền đủ điều kiện tại endpoint cố định. LLM chỉ nhận tín hiệu do ứng dụng tạo và không có quyền gọi công cụ. | Mở rộng nguồn đăng ký tên miền và nguồn threat intelligence đã cấp quyền. |
+| 2. Specialized Fraud Models | FraudURL-ML có đường huấn luyện LightGBM, tập holdout và manifest kiểm tra SHA-256. Khi nạp artifact đã duyệt, model cung cấp tín hiệu bổ trợ cho các URL có dấu hiệu từ bộ luật. | PhoBERT đa nhiệm với nhãn lừa đảo, thủ đoạn và đoạn bằng chứng rồi xuất ONNX INT8. Thử XGBoost với cùng holdout. Đánh giá DTD/DocTamper, AASIST/XLS-R và FraudFusion-ML có hiệu chuẩn trên tập độc lập. |
+| 3. Multimodal Reasoning | Fast Path xử lý mẫu rõ bằng luật và hồ sơ đã xác minh. Deep Path dùng Qwen4-Max, tín hiệu từ OCR hay bản chép lời cục bộ và tri thức truy xuất theo mã nhóm thủ đoạn. OCR biên lai dựng khung chữ. Phân tích nén JPEG cung cấp vùng đối chiếu. | Benchmark PP-OCRv5, PP-OCRv6 và PaddleOCR-VL trên ảnh tiếng Việt. Đánh giá Qwen3-VL-8B, Gemini 2.5 Flash, Qwen3-8B/QLoRA, BGE-M3 và BGE-reranker-v2-m3 với dữ liệu phù hợp. Kiểm chứng giao dịch cần nguồn ngân hàng được cấp quyền. |
+| 4. Graph & Risk | Nhóm báo cáo theo thực thể trùng. Chi tiết chiến dịch hiển thị đồ thị thực thể, loại đầu vào, liên kết cùng báo cáo và các chiến dịch trùng thực thể. | Bổ sung liên kết ảnh tương tự, nhãn từng thực thể và hiệu chuẩn rủi ro trên dữ liệu đánh giá độc lập. |
+| 5. Fraud Ops | LangGraph chạy Supervisor và sáu tác nhân đọc dữ liệu, đưa đề xuất và soạn nháp. API yêu cầu vai vận hành và đúng phiên bản hồ sơ để duyệt. Cảnh báo trong ứng dụng xuất hiện với thực thể trùng chiến dịch đã duyệt. | Tích hợp kênh cảnh báo được cấp quyền và quy trình xác minh với đối tác thanh toán. |
+| 6. Learning & Governance | `/v1/ops/feedback` xuất tín hiệu đã ẩn danh của chiến dịch còn báo cáo và đã duyệt. Model URL huấn luyện offline, đánh giá holdout và kích hoạt qua cấu hình của người vận hành. | Gán nhãn hai chiều trên dữ liệu được phép dùng, hàng đợi active learning và so sánh phiên bản trước khi phát hành. |
+
+`RDAP_LOOKUPS_PER_HOUR` có mặc định `0`. Đặt hạn mức dương để tra `.com` và `.net` tại cơ quan đăng ký Verisign. App hiển thị biên lai gốc cùng vùng OCR và sai khác nén. Trạng thái giao dịch là `unverified` cho đến khi đối chiếu bằng nguồn có thẩm quyền. [Verisign RDAP](https://origin.www1.verisign.com/news-insights/registration-data-access-protocol/help/) · [OWASP SSRF](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) · [OWASP Prompt Injection](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+
+Để dùng ghi âm, đặt `WHISPER_COMMAND` trỏ tới `whisper-cli` và `WHISPER_MODEL_PATH` trỏ tới trọng số cục bộ, ví dụ `ggml-large-v3-turbo.bin`. Trình duyệt chuyển tệp hỗ trợ sang WAV mono 16 kHz trước khi gửi. Backend nhận đoạn tối đa 45 giây và xóa tệp tạm sau khi nhận dạng. [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+
+Các tác nhân nhận ảnh chụp trạng thái chiến dịch và không có quyền cập nhật dữ liệu. Phản hồi đã duyệt là nhãn cấp chiến dịch. Để train model, dùng mẫu cấp URL có nhãn `phishing` và `benign` được xác minh riêng. [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api) · [Huấn luyện và đánh giá FraudURL](eval/README.md)
 
 ### Kiểm tra và triển khai
 

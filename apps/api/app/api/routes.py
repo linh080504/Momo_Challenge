@@ -12,16 +12,22 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from ..analyzer.contract import SCHEMA
+from ..analyzer.contract import SCHEMA, AnalyzerError
 from ..analyzer.providers.ocr import image_for
 from ..db.store import Login
+from ..evidence.url_gateway import inspect_url
 from ..ops.brief import brief
+from ..ops.investigation import run_workspace
 from ..qr.checks import evaluate, rebuild
 from ..reports.proof import issue_result
-from ..schemas.requests import AnalyzeIn, DecisionIn, LoginIn, ProofIn, QrIn, ReportIn, ReviewIn
+from ..schemas.requests import AnalyzeIn, DecisionIn, LoginIn, ProofIn, QrIn, QrResult, ReportIn, ReviewIn
 from ..sharing.summaries import summary_for
 
 MAX_BODY_BYTES = 7_100_000
+
+
+def body_contract(schema):
+    return {"requestBody": {"required": True, "content": {"application/json": {"schema": schema.model_json_schema()}}}}
 
 
 async def body_as(request, schema):
@@ -117,8 +123,22 @@ def make_routes(settings, store, signer, limits, users, analyzer):
         else:
             limit(request, "analyze", settings.analysis_per_minute)
         data = await body_as(request, AnalyzeIn)
-        if not (data.text.strip() or (data.url and data.url.strip()) or data.image_base64 is not None):
-            raise HTTPException(422, "Hãy dán văn bản, nhập liên kết hoặc tải ảnh.")
+        if data.qr_payload is not None:
+            data.qr_payload = data.qr_payload.strip()
+        for value in (data.url, data.qr_payload if (data.qr_payload or "").lower().startswith(("http://", "https://")) else None):
+            if value is not None:
+                try:
+                    inspect_url(value)
+                except (ValueError, UnicodeError) as exc:
+                    raise HTTPException(422, "Địa chỉ web không hợp lệ.") from exc
+        if data.image_kind == "receipt" and data.image_base64 is None:
+            raise HTTPException(422, "Hãy chọn ảnh biên lai.")
+        if data.audio_base64 is not None and data.image_base64 is not None:
+            raise HTTPException(422, "Mỗi lượt kiểm tra hỗ trợ một tệp đính kèm.")
+        if data.audio_base64 is None and data.qr_payload is None and not (data.text.strip() or data.url or data.image_base64):
+            raise HTTPException(422, "Hãy dán nội dung, nhập link, QR hoặc tải tệp.")
+        if data.audio_base64 == "" or (data.qr_payload is not None and not data.qr_payload.strip()):
+            raise HTTPException(422, "Dữ liệu tệp hoặc mã QR trống.")
         image = await run_in_threadpool(image_for, data)
         events = analyzer.events(data, image)
         first = await run_in_threadpool(next, events)
@@ -127,18 +147,16 @@ def make_routes(settings, store, signer, limits, users, analyzer):
     def result_for(event, user):
         return issue_result(event, signer, signer.digest("reporter", user[0]) if user else None)
 
-    body_contract = {"requestBody": {"required": True, "content": {
-        "application/json": {"schema": AnalyzeIn.model_json_schema()}
-    }}}
-
-    @router.post("/v1/analyze", openapi_extra=body_contract, responses={
+    @router.post("/v1/analyze", openapi_extra=body_contract(AnalyzeIn), responses={
         200: {"content": {"application/json": {"schema": SCHEMA}}}
     })
     async def analyze_once(request: Request, user=Depends(optional_identity)):
         _, events = await analysis_events(request, user)
         return await run_in_threadpool(lambda: result_for(next(item for item in events if "result" in item), user))
 
-    @router.post("/v1/analyze/stream", openapi_extra=body_contract)
+    @router.post("/v1/analyze/stream", openapi_extra=body_contract(AnalyzeIn), response_class=StreamingResponse,
+                 responses={200: {"description": "Tiến trình và một kết quả hoặc lỗi cuối, một JSON mỗi dòng.",
+                                  "content": {"application/x-ndjson": {"schema": {"type": "string"}}}}})
     async def stream_analysis(request: Request, user=Depends(optional_identity)):
         first, events = await analysis_events(request, user)
 
@@ -149,8 +167,10 @@ def make_routes(settings, store, signer, limits, users, analyzer):
                     if "result" in item:
                         item = {"result": result_for(item, user)}
                     yield json.dumps(item, ensure_ascii=False) + "\n"
+            except AnalyzerError as exc:
+                yield json.dumps({"error": exc.message, "status": exc.status}, ensure_ascii=False) + "\n"
             except (OSError, SQLAlchemyError):
-                yield json.dumps({"error": "Không thể hoàn tất phân tích. Hãy thử lại."}) + "\n"
+                yield json.dumps({"error": "Không thể hoàn tất phân tích. Hãy thử lại.", "status": 503}, ensure_ascii=False) + "\n"
 
         return StreamingResponse(stream(), media_type="application/x-ndjson", headers={"X-Accel-Buffering": "no"})
 
@@ -172,10 +192,14 @@ def make_routes(settings, store, signer, limits, users, analyzer):
 
     @router.get("/v1/ops/campaigns/{campaign_id}")
     def campaign(campaign_id: str, _user=Depends(operator)):
-        found = store.campaign(campaign_id)
+        found = store.campaign_investigation(campaign_id)
         if found is None:
             raise HTTPException(404, "Không tìm thấy chiến dịch.")
-        return titled(found)
+        return {**titled(found[0]), "workspace": run_workspace(*found)}
+
+    @router.get("/v1/ops/feedback")
+    def verified_feedback(_user=Depends(operator)):
+        return {"schema_version": 1, "samples": store.verified_feedback()}
 
     @router.post("/v1/ops/campaigns/{campaign_id}/decision")
     def decide(campaign_id: str, data: DecisionIn, user=Depends(operator)):
@@ -204,19 +228,19 @@ def make_routes(settings, store, signer, limits, users, analyzer):
             raise HTTPException(404, "Liên kết không hợp lệ hoặc đã hết hạn.")
         return summary_for(claim["risk"])
 
-    @router.post("/v1/qr/parse")
+    @router.post("/v1/qr/parse", openapi_extra=body_contract(QrIn), response_model=QrResult)
     async def parse_qr(request: Request):
         limit(request, "qr", 10)
         data = await body_as(request, QrIn)
-        _, result = await run_in_threadpool(evaluate, data, store, signer, settings)
+        _, result = await run_in_threadpool(evaluate, data, store, signer, settings, analyzer.safe_browsing)
         return result
 
-    @router.post("/v1/qr/build")
+    @router.post("/v1/qr/build", openapi_extra=body_contract(QrIn))
     async def build_qr(request: Request):
         limit(request, "qr", 10)
         data = await body_as(request, QrIn)
         qr, result = await run_in_threadpool(evaluate, data, store, signer, settings)
-        if not data.confirmed or result["risk"] != "low":
+        if qr is None or not data.confirmed or result["risk"] != "low":
             raise HTTPException(409, "Cần mã QR nguy cơ thấp và xác nhận người nhận trước khi tạo lại.")
         return {"payload": rebuild(qr)}
 

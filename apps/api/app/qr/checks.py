@@ -4,6 +4,7 @@ import subprocess
 from ..analyzer.contract import DISCLAIMER, AnalyzerError
 from ..analyzer.pipeline.rules import match_rules
 from ..analyzer.providers.ocr import image_for
+from ..evidence.url_gateway import checked_destination, inspect_url
 from ..kit import vietqr
 from ..media import media_slot, read_media
 from ..privacy.entities import ACCOUNT, extract
@@ -27,9 +28,28 @@ def decode_payload(data, settings):
     return payload
 
 
-def evaluate(data, store, signer, settings):
+def evaluate(data, store, signer, settings, safe_browsing=None):
+    payload = decode_payload(data, settings)
+    if payload.lower().startswith(("https://", "http://")):
+        try:
+            destination = inspect_url(payload)
+        except (ValueError, UnicodeError) as exc:
+            raise AnalyzerError(422, "Liên kết trong QR không hợp lệ.") from exc
+        _, _, domains = extract(data.text, payload, signer)
+        keys, _, _ = extract("", payload, signer)
+        flagged = store.matches(keys)
+        checked, found = safe_browsing.lookup(domains) if safe_browsing else (False, False)
+        risk = "high" if flagged or found or any(item["level"] == "high" for item in domains.values()) else "medium" if (
+            match_rules(data.text) or any(item["level"] == "medium" for item in domains.values())
+        ) else "uncertain"
+        return None, {**checked_destination(destination), "kind": "url", "risk": risk, "confirmed_alert": flagged,
+                      "threat_intel_checked": checked, "threat_intel_match": found, "disclaimer": DISCLAIMER}
+    return evaluate_payment(payload, data.text, store, signer)
+
+
+def evaluate_payment(payload, message, store, signer):
     try:
-        qr = vietqr.parse(decode_payload(data, settings))
+        qr = vietqr.parse(payload)
     except (ValueError, OverflowError) as exc:
         raise AnalyzerError(422, "Chuỗi VietQR không hợp lệ.") from exc
     if not (
@@ -41,17 +61,17 @@ def evaluate(data, store, signer, settings):
     amount = qr.amount
     if amount is not None and (not re.fullmatch(r"[0-9]{1,12}", amount) or int(amount) <= 0):
         raise AnalyzerError(422, "Số tiền trong QR không hợp lệ.")
-    mentioned = set(ACCOUNT.findall(data.text))
+    mentioned = set(ACCOUNT.findall(message))
     mismatch = bool(mentioned and mentioned != {qr.account})
-    keys, _, domains = extract(data.text, None, signer)
+    keys, _, domains = extract(message, None, signer)
     flagged = store.matches({*keys, signer.digest("ACCOUNT", qr.account)})
-    suspicious_text = any(domain["level"] != "low" for domain in domains.values()) or bool(match_rules(data.text))
+    suspicious_text = any(domain["level"] != "low" for domain in domains.values()) or bool(match_rules(message))
     risk = (
         "high" if flagged else "medium" if mismatch or not qr.valid_crc or suspicious_text
         else "low" if qr.bank_name else "uncertain"
     )
     return qr, {
-        "bank": qr.bank_name, "bank_bin": qr.bank_bin, "account": "••••" + qr.account[-4:],
+        "kind": "payment", "bank": qr.bank_name, "bank_bin": qr.bank_bin, "account": "••••" + qr.account[-4:],
         "amount": amount, "valid_crc": qr.valid_crc, "mismatch": mismatch,
         "confirmed_alert": flagged, "risk": risk, "disclaimer": DISCLAIMER,
     }

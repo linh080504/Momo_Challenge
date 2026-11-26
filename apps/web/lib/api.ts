@@ -2,6 +2,15 @@ export const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:800
 
 export type Risk = "high" | "medium" | "uncertain" | "low";
 export type Entity = { type: string; display: string };
+export type Region = [number, number, number, number];
+export type UrlCheck = { host: string; level: "low" | "medium" | "high"; domain_age_days: number | null; signals: string[] };
+export type DocumentEvidence = {
+  ocr_boxes: Region[];
+  recompression_regions: Region[];
+  signals: { category: string; finding: string }[];
+  transaction_status: "unverified";
+  notice: string;
+};
 export type Analysis = {
   analysis_id: string;
   risk_level: Risk;
@@ -14,16 +23,43 @@ export type Analysis = {
   entities: Entity[];
   ai_disclaimer: string;
   degraded: boolean;
+  model?: string;
+  analysis_path?: "fast" | "deep";
+  document?: DocumentEvidence;
+  url_checks?: UrlCheck[];
+  guidance?: { id: string; text: string }[];
 };
 export type AnalysisEvent = {
   stage: string;
   message: string;
   entities?: Entity[];
 };
-export type Input = { text: string; image_base64?: string; image_mime?: string };
+export type Input = {
+  text: string;
+  url?: string;
+  image_base64?: string;
+  image_mime?: string;
+  image_kind?: "image" | "receipt";
+  audio_base64?: string;
+  qr_payload?: string;
+};
 export type Account = { email: string; role: "user" | "ops" };
 export type Session = Account & { token: string };
 export type CampaignState = "pending" | "approved" | "rejected";
+export type Investigation = {
+  nodes: { id: string; label: string; count: number | null }[];
+  edges: { from: string; to: string; count: number }[];
+  related_campaigns: { id: string; state: CampaignState; shared_entities: number }[];
+};
+export type OpsWorkspace = {
+  permission: "draft_only";
+  detection: { risk: Risk; group: string | null; signals: string[]; source_counts: Record<string, number> };
+  threat_intel: { confirmed_related_campaigns: string[]; safe_browsing_hits: number };
+  forensics: { reviewed_input_counts: Record<string, number>; ocr_regions: number; jpeg_regions: number; transaction_status: "unverified" };
+  investigation: Investigation;
+  protection: { recommendations: string[] };
+  report: { title: string; summary: string; recommendation: string; approval_required: true; status: "draft" };
+};
 export type Campaign = {
   id: string;
   title: string;
@@ -37,6 +73,7 @@ export type Campaign = {
   signals: string[];
   created: number;
   history: { actor: string; action: "approve" | "reject" | "edit_group"; created: number }[];
+  workspace?: OpsWorkspace;
 };
 
 export class ApiError extends Error {

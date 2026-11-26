@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { Check, Inbox, LayoutGrid, RefreshCw, X } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
+import { InvestigationWorkspace } from "./investigation";
 import {
   api, ApiError, currentSession, entityLabels, riskLabels, saveSession,
   type Campaign, type CampaignState, type Session,
@@ -58,6 +59,7 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
     try {
       setDetail(await api<Campaign>("/v1/ops/campaigns/" + detail.id + "/decision", "POST",
         { decision, revision: detail.revision }, session.token));
+      setReload(value => value + 1);
     } catch (failure) {
       setError((failure as Error).message);
     } finally {
@@ -74,6 +76,7 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
     try {
       setDetail(await api<Campaign>("/v1/ops/campaigns/" + detail.id + "/review", "POST",
         { group, revision: detail.revision }, session.token));
+      setReload(value => value + 1);
     } catch (failure) {
       setError((failure as Error).message);
     } finally {
@@ -108,6 +111,7 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
         <h2>{detail.title}</h2>
         <p className="muted">Mã {detail.id.slice(0, 8).toUpperCase()} · {formatDate(detail.created)}</p>
         <p>{detail.summary}</p>
+        {detail.workspace && <InvestigationWorkspace workspace={detail.workspace} />}
         <h3>Thông tin đối chiếu</h3>
         <p>{Object.entries(detail.entities).map(([kind, count]) => count + " " + (entityLabels[kind]?.toLowerCase() || kind)).join(" · ") || "Chưa có thực thể dùng để đối chiếu."}</p>
         <h3>Bằng chứng từ báo cáo</h3>

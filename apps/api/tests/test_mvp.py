@@ -2,14 +2,18 @@ import base64
 import io
 import json
 import os
+import wave
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw, ImageFont
+from pydantic import SecretStr
 
 from app.analyzer.contract import VALIDATOR
 from app.config import Settings
+from app.evidence.url_gateway import inspect_url
 from app.kit import vietqr
 from app.main import create_app
 
@@ -25,7 +29,8 @@ def configured(tmp_path):
         app_secret="automated-test-secret-value-over-32-chars",
         demo_user_email="user@example.invalid", demo_user_password=DEMO_PASSWORD,
         demo_ops_email="ops@example.invalid", demo_ops_password=DEMO_PASSWORD,
-        llm_base_url="", llm_model="", safe_browsing_key="",
+        llm_base_url="", llm_model="", llm_fallback_model="", dashscope_api_key="", safe_browsing_key="",
+        fraud_url_model_path="", rdap_lookups_per_hour=0, whisper_command="", whisper_model_path="",
     )
 
 
@@ -99,6 +104,34 @@ def test_stream_uses_ocr_output_and_real_progress(client, monkeypatch):
     assert ACCOUNT not in response.text
 
 
+def test_public_input_contract_and_qr_result_variants(client):
+    paths = client.get("/openapi.json").json()["paths"]
+    ask = paths["/v1/analyze"]["post"]
+    stream = paths["/v1/analyze/stream"]["post"]
+    parse = paths["/v1/qr/parse"]["post"]
+    inputs = ask["requestBody"]["content"]["application/json"]["schema"]["properties"]
+    assert set(inputs) == {"text", "image_base64", "image_mime", "image_kind", "audio_base64", "qr_payload", "url", "locale"}
+    assert set(stream["responses"]["200"]["content"]) == {"application/x-ndjson"}
+    variants = parse["responses"]["200"]["content"]["application/json"]["schema"]["discriminator"]
+    assert variants["propertyName"] == "kind"
+    assert set(variants["mapping"]) == {"url", "payment"}
+    assert client.post("/v1/qr/parse", json={"payload": "invalid QR"}).status_code == 422
+
+
+def test_stream_ends_with_one_error_if_later_input_fails(client, monkeypatch):
+    from app.analyzer.agents import analyze as agent
+
+    monkeypatch.setattr(agent, "read_image", lambda image, settings: TEXT)
+    data = {**image_body(Image.new("RGB", (50, 40), "white")), "qr_payload": "invalid QR"}
+    response = client.post("/v1/analyze/stream", json=data)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    first, last = [json.loads(line) for line in response.text.splitlines()]
+    assert first["stage"] == "image_read"
+    assert last["status"] == 422 and last["error"] and "result" not in last
+    assert client.post("/v1/analyze", json=data).status_code == 422
+
+
 def test_real_ocr(client):
     image = Image.new("RGB", (1120, 300), "white")
     draw = ImageDraw.Draw(image)
@@ -110,6 +143,9 @@ def test_real_ocr(client):
     response = client.post("/v1/analyze", json=image_body(image))
     assert response.status_code == 200, response.text
     assert response.json()["risk_level"] == "high"
+    receipt = client.post("/v1/analyze", json={**image_body(image), "image_kind": "receipt"})
+    assert receipt.status_code == 200
+    assert receipt.json()["document"]["ocr_boxes"]
     blank = client.post("/v1/analyze", json=image_body(Image.new("RGB", (320, 240), "white")))
     assert blank.status_code == 422
 
@@ -214,8 +250,10 @@ def test_qr_confirmation_mismatch_crc_and_decode(client):
 
 def test_model_fallback_and_domain_lookup_never_send_input(configured, monkeypatch):
     configured.llm_base_url = "https://llm.example.invalid/v1"
+    configured.llm_api_key = "fake-chat-key"
     configured.llm_model = "primary"
     configured.llm_fallback_model = "fallback"
+    configured.dashscope_api_key = SecretStr("fake-qwen-key")
     configured.safe_browsing_key = "fake"
     calls = []
 
@@ -227,6 +265,7 @@ def test_model_fallback_and_domain_lookup_never_send_input(configured, monkeypat
         assert "private-query" not in wire
         request = httpx.Request("POST", url)
         if url.startswith(configured.llm_base_url):
+            assert kwargs["headers"]["Authorization"] == "Bearer fake-chat-key"
             if body["model"] == "primary":
                 return httpx.Response(503, request=request)
             data = {"choices": [{"message": {"content": '{"risk_level":"high","scenario_id":"G5.1"}'}}]}
@@ -242,3 +281,172 @@ def test_model_fallback_and_domain_lookup_never_send_input(configured, monkeypat
     assert result["model"] == "fallback" and not result["degraded"]
     assert any(item["source"] == "safe_browsing" for item in result["evidence"])
     assert len(calls) == 3
+
+
+@pytest.mark.parametrize("status", [200, 503])
+def test_qwen_responses_provider(configured, monkeypatch, status):
+    configured.dashscope_api_key = SecretStr("fake-qwen-key")
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(url)
+        assert url == "https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1/responses"
+        assert kwargs["headers"]["Authorization"] == "Bearer fake-qwen-key"
+        body = kwargs["json"]
+        assert body["model"] == "qwen4-max"
+        assert body["reasoning"] == {"effort": "none"}
+        assert body["store"] is False
+        assert ACCOUNT not in body["input"] and TEXT not in body["input"]
+        assert json.loads(body["input"])["signals"]
+        data = {"output": [
+            {"type": "reasoning", "summary": []},
+            {"type": "message", "content": [
+                {"type": "output_text", "text": '{"risk_level":"high","scenario_id":"G1.1"}'},
+            ]},
+        ]}
+        return httpx.Response(status, request=httpx.Request("POST", url), json=data)
+
+    monkeypatch.setattr(httpx, "post", post)
+    with TestClient(create_app(configured)) as test_client:
+        result = analyze(test_client)
+    assert len(calls) == 1
+    assert result["risk_level"] == "high"
+    assert result["degraded"] is (status == 503)
+    if status == 200:
+        assert result["model"] == "qwen4-max"
+
+
+def test_url_gateway_and_qr_link(client):
+    raw = "https://mоmо.vn./x?secret=123456789"
+    domains = inspect_url(raw)
+    assert domains["host"].startswith("xn--")
+    assert "brand_homoglyph" in {item["signal"] for item in domains["signals"]}
+    response = client.post("/v1/analyze", json={"url": raw})
+    assert response.status_code == 200
+    assert "secret" not in response.text
+    assert response.json()["url_checks"][0]["level"] == "high"
+    assert not inspect_url("https://127.0.0.1:8000/")["lookup_allowed"]
+    assert inspect_url("https://user@momo.vn/")["level"] == "medium"
+    assert client.post("/v1/analyze", json={"url": "file:///tmp/input"}).status_code == 422
+    link = client.post("/v1/qr/parse", json={"payload": raw}).json()
+    assert link["kind"] == "url" and link["host"] == domains["host"]
+    assert client.post("/v1/qr/build", json={"payload": raw, "confirmed": True}).status_code == 409
+
+
+def test_threat_intel_uses_registered_and_tenant_domains_only(configured, monkeypatch):
+    configured.safe_browsing_key = "fake"
+
+    def post(url, **kwargs):
+        assert url == "https://safebrowsing.googleapis.com/v4/threatMatches:find"
+        assert kwargs["follow_redirects"] is False and kwargs["trust_env"] is False
+        entries = kwargs["json"]["threatInfo"]["threatEntries"]
+        assert entries == [{"url": "https://example.co.jp/"}, {"url": "https://tenant.github.io/"}]
+        data = {"matches": [{"threat": {"url": "https://unrelated.invalid/"}, "cacheDuration": "120s"}]}
+        return httpx.Response(200, request=httpx.Request("POST", url), json=data)
+
+    monkeypatch.setattr(httpx, "post", post)
+    with TestClient(create_app(configured)) as client:
+        result = analyze(client, " ".join(("https://page.example.co.jp/private-path",
+                                         "https://app.tenant.github.io/private-path",
+                                         "http://127.0.0.1:8020/example", "https://localname.internal/")))
+    assert not any(item["source"] == "safe_browsing" and item["weight"] > 0 for item in result["evidence"])
+    assert "private-path" not in json.dumps(result)
+
+
+def test_rdap_uses_only_registry_and_domain(configured, monkeypatch):
+    configured.rdap_lookups_per_hour = 1
+    calls = []
+
+    def get(url, **kwargs):
+        calls.append(url)
+        assert url == "https://rdap.verisign.com/com/v1/domain/momo-verify-example.com"
+        assert kwargs["follow_redirects"] is False
+        created = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        return httpx.Response(200, request=httpx.Request("GET", url),
+                              json={"events": [{"eventAction": "registration", "eventDate": created}]})
+
+    monkeypatch.setattr(httpx, "get", get)
+    with TestClient(create_app(configured)) as client:
+        url = "https://momo-verify-example.com/private-documents?token=demo"
+        result = analyze(client, url)
+        assert result["url_checks"][0]["domain_age_days"] == 7
+        assert any(row["source"] == "rdap" for row in result["evidence"])
+        assert analyze(client, url)["url_checks"][0]["domain_age_days"] is None
+    assert len(calls) == 1
+
+
+def test_receipt_regions_and_unverified_transaction(client, monkeypatch):
+    from app.analyzer.providers import ocr
+
+    text = "Giao dịch thành công 125.000 VND"
+    tsv = "level\tleft\ttop\twidth\theight\ttext\n5\t25\t10\t50\t20\t" + text
+
+    def recognize(operation, *_args, **_kwargs):
+        assert operation == "ocr-tsv"
+        return tsv
+
+    monkeypatch.setattr(ocr, "read_media", recognize)
+    payload = {**image_body(Image.new("RGB", (100, 100), "white")), "image_kind": "receipt"}
+    result = client.post("/v1/analyze", json=payload).json()
+    VALIDATOR.validate(result)
+    document = result["document"]
+    assert document["ocr_boxes"] == [[0.25, 0.1, 0.5, 0.2]]
+    assert document["transaction_status"] == "unverified"
+    assert {item["category"] for item in document["signals"]} == {"physical", "visual", "semantic"}
+
+
+def test_speech_ingestion_and_local_transcription(configured, monkeypatch):
+    from pathlib import Path
+    from app.analyzer.providers import speech
+
+    data = io.BytesIO()
+    with wave.open(data, "wb") as clip:
+        clip.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        clip.writeframes(bytes(32_000))
+    body = {"audio_base64": base64.b64encode(data.getvalue()).decode()}
+    with TestClient(create_app(configured)) as client:
+        assert client.post("/v1/analyze", json=body).status_code == 503
+        assert client.post("/v1/analyze", json={"audio_base64": "invalid"}).status_code == 422
+
+    configured.whisper_command = "whisper-cli"
+    configured.whisper_model_path = "test-model.bin"
+    calls = []
+
+    def run(command, **_kwargs):
+        source = Path(command[-1])
+        assert source.read_bytes() == data.getvalue()
+        source.with_suffix(".txt").write_text(TEXT, encoding="utf-8")
+        calls.append(source)
+
+    monkeypatch.setattr(speech.subprocess, "run", run)
+    with TestClient(create_app(configured)) as client:
+        response = client.post("/v1/analyze", json=body)
+        assert response.status_code == 200
+        assert response.json()["risk_level"] == "high"
+    assert len(calls) == 1 and not calls[0].exists()
+
+
+def test_investigation_graph_and_verified_feedback(client):
+    user, ops = login(client, "user"), login(client, "ops")
+    campaign = report(client, user, analyze(client))
+    detail_url = "/v1/ops/campaigns/" + campaign
+    assert client.get(detail_url, headers=user).status_code == 403
+    assert client.get("/v1/ops/feedback", headers=user).status_code == 403
+    assert client.get("/v1/ops/feedback", headers=ops).json()["samples"] == []
+    detail = client.get(detail_url, headers=ops)
+    assert ACCOUNT not in detail.text
+    workspace = detail.json()["workspace"]
+    assert workspace["permission"] == "draft_only"
+    assert workspace["report"]["approval_required"] is True
+    assert any(edge["from"] == "entity-ACCOUNT" and edge["to"] == "input-text"
+               for edge in workspace["investigation"]["edges"])
+    assert analyze(client)["model"] == "rules"
+    assert not any(item["source"] == "internal_blacklist" for item in analyze(client)["evidence"])
+    decision = client.post(detail_url + "/decision", headers=ops,
+                           json={"decision": "approve", "revision": detail.json()["revision"]})
+    assert decision.status_code == 200
+    samples = client.get("/v1/ops/feedback", headers=ops).json()["samples"]
+    assert [(item["campaign_id"], item["review_label"]) for item in samples] == [(campaign, "approved_campaign")]
+    related_campaign = report(client, user, analyze(client))
+    related = client.get("/v1/ops/campaigns/" + related_campaign, headers=ops).json()["workspace"]
+    assert related["threat_intel"]["confirmed_related_campaigns"] == [campaign]

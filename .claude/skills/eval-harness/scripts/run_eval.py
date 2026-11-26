@@ -59,8 +59,12 @@ BASELINE_RULES = [
 
 
 def input_type(row: dict) -> str:
-    """Loại đầu vào của mẫu: có trường "image" → image, ngược lại → text."""
-    return "image" if row.get("image") else "text"
+    if row.get("image"):
+        return "receipt" if row.get("image_kind") == "receipt" else "image"
+    for field, kind in (("audio", "audio"), ("qr_payload", "qr"), ("url", "url")):
+        if row.get(field):
+            return kind
+    return "text"
 
 
 def baseline_predict(text: str) -> dict:
@@ -72,10 +76,10 @@ def baseline_predict(text: str) -> dict:
 
 
 def baseline_predict_row(row: dict) -> dict:
-    """Mốc từ khóa không đọc được ảnh → mẫu ảnh luôn là low (kể cả khi mẫu có kèm text)."""
-    if input_type(row) == "image":
+    """Mốc từ khóa dùng low cho các mẫu đính kèm cần OCR hoặc ASR."""
+    if input_type(row) in {"image", "receipt", "audio"}:
         return {"risk_level": "low", "scenario_group": None}
-    return baseline_predict(row["text"])
+    return baseline_predict(row.get("text") or row.get("url") or "")
 
 
 def load_image(path: str) -> tuple[str, str]:
@@ -92,11 +96,24 @@ def load_image(path: str) -> tuple[str, str]:
 
 
 def build_payload(row: dict) -> dict:
-    """Thân JSON gửi lên /v1/analyze. Mẫu không có "image" giữ nguyên dạng cũ {"text": ...}."""
-    if input_type(row) == "text":
-        return {"text": row["text"]}
-    image_b64, image_mime = load_image(row["image"])
-    return {"text": row.get("text") or "", "image_base64": image_b64, "image_mime": image_mime}
+    payload = {"text": row.get("text") or ""}
+    for field in ("url", "qr_payload"):
+        if row.get(field):
+            payload[field] = row[field]
+    if row.get("audio") and row.get("image"):
+        raise ValueError("Mỗi mẫu chỉ hỗ trợ một tệp đính kèm")
+    if row.get("image"):
+        payload["image_base64"], payload["image_mime"] = load_image(row["image"])
+        if row.get("image_kind") == "receipt":
+            payload["image_kind"] = "receipt"
+    if row.get("audio"):
+        audio = pathlib.Path(row["audio"])
+        with audio.open("rb") as source:
+            data = source.read(2_000_001)
+        if len(data) > 2_000_000:
+            raise ValueError("Bản ghi vượt quá 2.000.000 byte")
+        payload["audio_base64"] = base64.b64encode(data).decode("ascii")
+    return payload
 
 
 def endpoint_predict(url: str, payload: dict, timeout: float, token: str | None = None) -> dict:
@@ -161,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = [json.loads(line) for line in pathlib.Path(args.data).read_text(encoding="utf-8").splitlines()
             if line.strip()]
     results, errors = [], []
-    latencies: dict[str, list[float]] = {"text": [], "image": []}
+    latencies: dict[str, list[float]] = {kind: [] for kind in ("text", "image", "url", "qr", "audio", "receipt")}
 
     for row in rows:
         kind = input_type(row)
@@ -202,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
         rs = [r for r in scams if r["group"] == g]
         per_group[g] = {"n": len(rs), "recall": round(sum(r["flagged"] for r in rs) / len(rs), 3)}
     injection = [r for r in scams if "injection" in r["tags"]]
-    all_latencies = latencies["text"] + latencies["image"]
+    all_latencies = [value for measurements in latencies.values() for value in measurements]
     n_text = sum(r["input_type"] == "text" for r in results)
     n_image = sum(r["input_type"] == "image" for r in results)
 
@@ -215,6 +232,12 @@ def main(argv: list[str] | None = None) -> int:
         "injection_recall": round(sum(r["flagged"] for r in injection) / len(injection), 3) if injection else None,
         "latency_p50_s": round(statistics.median(all_latencies), 3) if all_latencies else 0,
         "p95_text": _p95_or_none(latencies["text"]), "p95_image": _p95_or_none(latencies["image"]),
+        "synthetic_count": sum(row.get("synthetic") is True for row in rows),
+        "by_input": {kind: {"n": sum(row["input_type"] == kind for row in results),
+                            "p95_s": _p95_or_none(measurements),
+                            "errors": sum(row["input_type"] == kind for row in errors),
+                            "uncertain": sum(row["input_type"] == kind and row["pred"] == "uncertain" for row in results)}
+                     for kind, measurements in latencies.items()},
         # p95 gộp chỉ để tương thích hook session-context; KHÔNG dùng làm cổng vì trộn hai phân phối khác nhau
         "latency_p95_s": round(pct(all_latencies, 95), 3), "errors": len(errors),
         "missed_scams": [r["id"] for r in scams if not r["flagged"]],
@@ -252,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
 
     md = [f"# Eval `{args.tag}` — {summary['time']}", "",
           f"- Mẫu: {summary['n']} ({summary['n_scam']} lừa đảo, {summary['n_legit']} hợp lệ)"
-          f" · Văn bản: {n_text} · Ảnh: {n_image}",
+          f" · Văn bản: {n_text} · Ảnh: {n_image} · Tổng hợp: {summary['synthetic_count']}",
           f"- Recall lừa đảo: **{summary['recall_scam']}** · Báo nhầm (FPR): **{summary['false_positive_rate']}**"
           f" · Precision: {summary['precision']} · Đúng nhóm thủ đoạn: {summary['group_accuracy']}",
           f"- Độ trễ p50 (tất cả): {summary['latency_p50_s']}s"
@@ -262,6 +285,10 @@ def main(argv: list[str] | None = None) -> int:
           f"- Recall theo nhóm: {json.dumps(per_group, ensure_ascii=False)}",
           f"- Bỏ sót: {', '.join(summary['missed_scams']) or 'không'}",
           f"- Báo nhầm: {', '.join(summary['false_alarms']) or 'không'}"]
+    if any(summary["by_input"][kind]["n"] for kind in ("url", "qr", "audio", "receipt")):
+        md.extend(f"- `{kind}`: {stats['n']} mẫu · p95 {_fmt_p95(stats['p95_s'], stats['n'])}"
+                  f" · {stats['uncertain']} chưa đủ bằng chứng · {stats['errors']} lỗi"
+                  for kind, stats in summary["by_input"].items() if stats["n"] and kind not in {"text", "image"})
     if args.baseline and n_image:
         md.append(f"- Lưu ý baseline: {n_image} mẫu ảnh tính là \"không đọc được\" (risk_level low).")
     if not n_image:

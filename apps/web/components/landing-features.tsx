@@ -2,22 +2,24 @@
 
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
-import { Camera, FileCheck, Inbox, Link2, ScanLine, UsersRound } from "lucide-react";
+import { Camera, FileCheck, Inbox, Link2, Mic, ReceiptText, ScanLine, UsersRound } from "lucide-react";
 
 const collections = [
   {
     title: "Người dùng",
     features: [
       { icon: Link2, title: "Tin nhắn và đường link", text: "Kiểm tra lời thúc giục, yêu cầu cung cấp mã hoặc tên miền có dấu hiệu bất thường.", href: "#kiem-tra", link: "Kiểm tra nội dung" },
-      { icon: Camera, title: "Ảnh chụp màn hình", text: "Đọc chữ từ ảnh đoạn chat, hóa đơn hoặc trang bạn nhận được.", href: "#kiem-tra", link: "Tải ảnh để kiểm tra" },
-      { icon: ScanLine, title: "Mã VietQR", text: "Đối chiếu ngân hàng, tài khoản nhận và số tiền trong mã QR.", href: "/qr", link: "Mở kiểm tra VietQR" },
+      { icon: Camera, title: "Ảnh chụp màn hình", text: "Đọc chữ từ ảnh đoạn chat hoặc thông báo bạn nhận được.", href: "#kiem-tra", link: "Tải ảnh để kiểm tra" },
+      { icon: ScanLine, title: "Mã QR", text: "Kiểm tra tên miền trong QR liên kết hoặc đối chiếu thông tin người nhận trong VietQR.", href: "/qr", link: "Mở kiểm tra QR" },
+      { icon: ReceiptText, title: "Biên lai giao dịch", text: "Xem vùng chữ và dấu hiệu nén trên ảnh, rồi đối chiếu với lịch sử giao dịch.", href: "#kiem-tra", link: "Kiểm tra biên lai" },
+      { icon: Mic, title: "Ghi âm", text: "Tìm dấu hiệu thúc giục hoặc yêu cầu chuyển tiền trong bản chép lời khi có Whisper.", href: "#kiem-tra", link: "Kiểm tra bản ghi" },
       { icon: UsersRound, title: "Hỏi người thân", text: "Chia sẻ tóm tắt đã che thông tin qua đường dẫn có hiệu lực 24 giờ.", href: "#kiem-tra", link: "Tạo kết quả để chia sẻ" },
     ],
   },
   {
     title: "Vận hành",
     features: [
-      { icon: Inbox, title: "Báo cáo cùng chiến dịch", text: "Gom báo cáo có thông tin đối chiếu trùng và xem lại bằng chứng trong một hồ sơ.", href: "/ops", link: "Mở bàn vận hành" },
+      { icon: Inbox, title: "Bản đồ chiến dịch", text: "Xem các loại bằng chứng và thực thể ẩn danh trùng nhau trong báo cáo.", href: "/ops", link: "Mở bàn vận hành" },
       { icon: FileCheck, title: "Duyệt có nhật ký", text: "Chuyên viên kiểm tra, phân loại và quyết định trước khi cảnh báo xuất hiện cho người dùng.", href: "/ops", link: "Xem chiến dịch" },
       { icon: UsersRound, title: "Cảnh báo đã xác nhận", text: "Dấu hiệu trùng với một chiến dịch đã duyệt có thể xuất hiện ở những lần kiểm tra sau.", href: "#kiem-tra", link: "Xem cách kiểm tra" },
     ],

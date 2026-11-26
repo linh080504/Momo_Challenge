@@ -160,3 +160,40 @@ Phương pháp **đo thật + phỏng vấn xác nhận**:
 | ~~2–3 số liệu có nguồn cho mục 1~~ | pm-lead | `docs/PRODUCT_BRIEF.md` | ✅ **XONG 2026-11-24** — 2 số liệu có link nguồn | Ngày 1 |
 
 Chia việc chi tiết theo ngày: `docs/TASKS.md`. 7 task trên đã được nhúng vào `docs/PLAN.md` đúng ngày cần làm.
+
+## Phạm vi phiên bản nâng cấp PayPause AI
+
+Người dùng có thể kiểm tra sáu dạng nội dung trước khi chuyển tiền gồm tin nhắn, ảnh chụp, URL, QR, ghi âm và biên lai. Kết quả giúp họ hiểu tín hiệu, xem bằng chứng và chọn cách xác minh. Chuyên viên vận hành có bản đồ chiến dịch, kết quả điều tra và bản nháp cảnh báo để ra quyết định.
+
+- **Trải nghiệm hiện có ở bản local.** Kiểm tra tin nhắn, ảnh, URL, QR liên kết và VietQR. Biên lai hiển thị ảnh gốc, vùng chữ và sai khác nén JPEG để đối chiếu. Luồng ghi âm có giao diện và adapter Whisper, cần cấu hình môi trường để chạy nhận dạng thật.
+- **Độ tin cậy của kết quả.** Tín hiệu kỹ thuật và bằng chứng đã xác minh có nguồn rõ ràng. Dữ liệu ghi âm và ảnh được xử lý theo cấu hình của hệ thống. Kết quả từ ảnh biên lai thể hiện trạng thái `unverified` đến khi có đối chiếu từ nguồn giao dịch được cấp quyền.
+- **Trải nghiệm chuyên viên.** Supervisor điều phối sáu tác nhân đọc bằng chứng, tra tín hiệu, xử lý thông tin pháp y, nối chiến dịch, đề xuất bảo vệ và soạn nháp. Chuyên viên quyết định duyệt hoặc bác bỏ, có nhật ký và quyền theo vai. Cảnh báo đa kênh và xác minh giao dịch phụ thuộc nguồn dịch vụ được cấp quyền.
+- **Điều kiện mở rộng.** Chỉ số chính của MVP vẫn là recall, báo nhầm và p95 tách theo loại đầu vào. Thêm chất lượng OCR/ASR, vùng bằng chứng biên lai, độ hiệu chuẩn, gộp chiến dịch, tỷ lệ gọi Deep Path, chi phí mỗi ca và thời gian ra quyết định của chuyên viên. Số liệu công bố cần gắn phiên bản, tập dữ liệu và phạm vi đánh giá.
+
+[Kiến trúc](PLAN.md#lộ-trình-nâng-cấp-paypause-ai) · [Kế hoạch xây dựng từng bước](PLAN.md#kế-hoạch-xây-dựng-từng-bước) · [Kịch bản nghiệm thu](USER_TESTS.md#kịch-bản-nghiệm-thu-bản-nâng-cấp)
+
+### Hợp đồng sáu đầu vào và hai luồng sản phẩm
+
+**Người dùng** mở trang kiểm tra, dán nội dung hoặc chọn tệp, xem tiến trình và nhận một kết quả cuối. Từ kết quả, họ xác minh qua nguồn chính thức, chia sẻ tóm tắt 24 giờ hoặc đăng nhập để báo cáo. Người dùng mở `/qr` khi cần đọc ảnh QR và đối chiếu thông tin người nhận.
+
+**Chuyên viên** đăng nhập `/ops`, mở hàng đợi và chọn chiến dịch, đối chiếu đồ thị, tín hiệu và bản nháp. Có thể sửa nhóm thủ đoạn trước khi duyệt hoặc bác bỏ. API ghi quyết định cùng phiên bản hồ sơ. Người dùng nhận cảnh báo khi lượt kiểm tra sau trùng thực thể trong hồ sơ đã duyệt.
+
+| Đầu vào | Trường JSON và giới hạn | Xử lý và bằng chứng | Lỗi cần thử |
+|---|---|---|---|
+| Tin nhắn | `text`, tối đa 12.000 ký tự | Trích thực thể, đối chiếu luật/nguồn, hiển thị câu chữ và lý do | Thiếu nội dung hoặc vượt giới hạn trả 422. |
+| Ảnh chụp | `image_base64`, `image_mime`, mặc định `image_kind: "image"`. PNG/JPEG tối đa 5 MiB và 16 triệu pixel | OCR tiếng Việt, sau đó phân tích văn bản. Tiến trình `image_read` | Sai loại trả 415. Quá cỡ trả 413. Ảnh hỏng hoặc không đọc được chữ trả 422. |
+| URL | `url`, tối đa 2.000 ký tự. Có thể dán link trong `text` | Chuẩn hóa tên miền và hiển thị `url_checks`; có nguồn tra cứu khi cấu hình | Địa chỉ không hợp lệ ở trường `url` trả 422. |
+| QR | `/v1/qr/parse` nhận `payload` tối đa 1.024 ký tự hoặc ảnh QR. Analyzer nhận `qr_payload` đã giải mã tối đa 2.000 ký tự | `/v1/qr/parse` trả `kind: "url"` hoặc `"payment"`. Analyzer phát `qr_read`; phía người dùng thấy loại mã, tên miền hoặc thông tin nhận đã che | Mã hỏng/không đọc được trả 422. Tạo lại yêu cầu QR thanh toán rủi ro thấp và xác nhận, nếu thiếu trả 409. |
+| Ghi âm | `audio_base64`, WAV PCM mono 16 bit, 16 kHz, tối đa 45 giây và 2.000.000 byte | Whisper cục bộ, phát `audio_read` và chuyển bản chép lời qua luồng phân tích văn bản | Không đúng thông số trả 415. WAV lỗi hoặc quá thời lượng trả 422. Thiếu Whisper trả 503. |
+| Biên lai | Cùng giới hạn ảnh, đặt `image_kind: "receipt"` và giữ tệp gốc trong giới hạn | `document` gồm vùng chữ OCR, vùng sai khác nén và `transaction_status: "unverified"` | Thiếu ảnh trả 422. Dùng các ca lỗi ảnh và ảnh nén để kiểm tra. |
+
+`/v1/analyze` trả JSON theo `analysis.schema.json`. `/v1/analyze/stream` dùng `application/x-ndjson`. Các chặng trích xuất tùy đầu vào, sau đó có `entities`, `evidence` và một dòng `{result}`. Lỗi trước khi mở stream dùng HTTP cùng `detail`. Lỗi sau khi đã mở stream dùng một dòng cuối `{error, status}`. Request có thể kèm văn bản và tối đa một tệp ảnh hoặc ghi âm. `locale` mặc định `vi`. Tổng thân JSON tối đa 7.100.000 byte.
+
+| Hành động | Khách | Người dùng | Chuyên viên |
+|---|---|---|---|
+| Phân tích tin nhắn/ảnh/URL/QR/ghi âm/biên lai | Có | Có | Có |
+| Chia sẻ tóm tắt | Có, nếu kết quả tạo khi chưa đăng nhập | Có với kết quả của mình | Có với kết quả của mình |
+| Gửi báo cáo có đồng ý, xóa các báo cáo thuộc tài khoản | Cần đăng nhập | Có | Có |
+| Xem hồ sơ, sửa nhóm, duyệt/bác và xem phản hồi đã xác minh | Cần đăng nhập | Yêu cầu vai vận hành | Có |
+
+Khoá báo cáo và chia sẻ là `analysis_id` có thời hạn 30 phút. Hồ sơ cập nhật trong lúc chuyên viên đang xem sẽ buộc tải lại trước khi duyệt bằng phiên bản mới. [Kịch bản nghiệm thu](USER_TESTS.md#kịch-bản-nghiệm-thu-bản-nâng-cấp)

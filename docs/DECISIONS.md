@@ -35,3 +35,28 @@
 | 2026-11-26 | MVP đọc ảnh tiếng Việt bằng OCR cục bộ. Chỉ chuyển tín hiệu có sẵn từ bộ quy tắc vào LLM, dùng prompt `signals-v1`. Safe Browsing kiểm tra tên miền gốc. | Giữ ảnh, văn bản gốc và đường dẫn riêng của URL trong máy chủ ứng dụng. | Triển khai MVP |
 | 2026-11-26 | Schema phân tích có hai trường tùy chọn `degraded` và `analysis_id`. Web nhận tiến trình qua `POST /v1/analyze/stream`. Endpoint `POST /v1/analyze` vẫn trả JSON kết quả. | Hỗ trợ chế độ hạn chế và liên kết kết quả với thao tác báo cáo/chia sẻ mà vẫn dùng được bộ eval hiện có. | Triển khai MVP |
 | 2026-11-26 | Gom báo cáo theo tài khoản, số điện thoại hoặc tên miền có mã đối chiếu trùng. Hồ sơ vận hành tổng hợp bằng chứng đã che và yêu cầu quyết định của chuyên viên. | Cho phép kiểm thử luồng công khai hóa cảnh báo với bằng chứng đối chiếu được. | Triển khai MVP |
+
+## Quyết định triển khai bản nâng cấp
+
+| Ngày ghi | Quyết định | Lý do và phạm vi | Trạng thái |
+|---|---|---|---|
+| 2026-11-27 | Backend chọn `qwen4-max` qua Responses API Singapore khi có `DASHSCOPE_API_KEY` và cấu hình Chat Completions để trống. Dùng prompt `signals-v2` với tri thức truy xuất theo nhóm thủ đoạn. | Qwen gọi thật thành công. Fast Path xử lý mẫu rõ bằng luật và bằng chứng. Deep Path chỉ gửi tín hiệu có cấu trúc do ứng dụng tạo. | Đã kiểm chứng local |
+| 2026-11-27 | Cổng URL/QR phân tích chuỗi và cấu trúc ở ứng dụng. Khi bật tra cứu, gửi tên miền phù hợp tới endpoint Safe Browsing hoặc RDAP đã định sẵn. | Chuẩn hóa IDN và đối chiếu thương hiệu mà không tải trang người dùng gửi. Kiểm soát egress và quyền công cụ tại ứng dụng. | Đã triển khai. Độ phủ RDAP hiện là `.com` và `.net` |
+| 2026-11-27 | Ảnh biên lai giữ nguyên tệp trong giới hạn 5 MB. Nhánh ghi âm gửi WAV PCM mono 16 kHz, tối đa 45 giây, để nhận dạng cục bộ. | Giữ ảnh gốc để xem dấu hiệu nén. Tệp ghi âm tạm nằm trong vòng đời xử lý. Trạng thái giao dịch cần nguồn xác minh có thẩm quyền. | Biên lai đã thử thật. Whisper cần máy và trọng số |
+| 2026-11-27 | LangGraph gồm Supervisor và sáu tác nhân với quyền đọc và soạn nháp. Chỉ endpoint vận hành kiểm tra vai chuyên viên và phiên bản hồ sơ mới ghi quyết định. | Giữ việc duyệt cảnh báo có người chịu trách nhiệm. Các cạnh đồ thị thể hiện cùng xuất hiện hoặc trùng thực thể, dùng để điều tra. | Đã kiểm chứng luồng duyệt và cảnh báo web |
+| 2026-11-27 | Phản hồi đã duyệt là nhãn cấp chiến dịch. FraudURL cần nhãn đã xác minh ở cấp URL, holdout tách theo tên miền và artifact có manifest. | Giữ nguồn nhãn rõ ràng và khả năng truy lại phiên bản. Model chỉ được bật khi cấu hình đường dẫn artifact đã đánh giá. | Pipeline kỹ thuật đã thử bằng mẫu tổng hợp |
+| 2026-11-27 | Giữ các ứng viên OCR, VLM, FraudLLM và model chuyên biệt trong vòng benchmark trước khi chọn. | Quyết định phát hành dựa trên độ chính xác, báo nhầm, độ trễ, chi phí và quyền sử dụng dữ liệu. | Chờ tập dữ liệu và môi trường đánh giá |
+
+[Lộ trình và tiêu chí nghiệm thu](PLAN.md#lộ-trình-nâng-cấp-paypause-ai)
+
+### Bằng chứng và phạm vi kết nối của cổng bảo mật
+
+| Nguồn | Dữ liệu đọc | Phạm vi kết nối hoặc đối chiếu |
+|---|---|---|
+| Bộ quy tắc tên miền và QR | Tên miền, cấu trúc URL và nội dung QR | Chạy cục bộ. Public Suffix List dùng snapshot đi kèm thư viện. Tenant dịch vụ dùng chung có phạm vi tra cứu riêng. |
+| Safe Browsing | Tên miền đủ điều kiện sau chuẩn hóa | Gửi tên miền gốc hoặc tenant tới endpoint Google cố định. Khóa lấy từ cấu hình máy chủ. Cảnh báo chỉ tính kết quả tương ứng với mục đã hỏi. |
+| RDAP | Tên miền đăng ký thuộc `.com`/`.net` | Dùng endpoint cố định của Verisign với giới hạn lượt. Tuổi tên miền là tín hiệu bổ trợ. |
+| Đối chiếu người nhận | HMAC của thông tin đã trích | Đọc các chiến dịch do chuyên viên duyệt. Báo cáo đang chờ hoặc bị bác không cấp cảnh báo. |
+| Qwen và Chat Completions | Dấu hiệu, loại bằng chứng và mục tri thức do mã ứng dụng tạo | Nhà cung cấp theo cấu hình máy chủ. LLM chỉ trả trường phân loại và không có quyền gọi công cụ hay duyệt hồ sơ. |
+
+Rà soát staging từ xa cần kiểm chứng khóa Safe Browsing, quyền ghi dữ liệu, mã hóa khi lưu, lưu giữ/xóa dữ liệu và cấu hình mạng của môi trường đích. [Public Suffix List trong tldextract](https://github.com/john-kurkowski/tldextract#how-to-disable-http-suffix-list-fetching-for-production)

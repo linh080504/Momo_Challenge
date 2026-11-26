@@ -1,9 +1,10 @@
 import time
+from collections import Counter
 from contextlib import contextmanager
 from uuid import uuid4
 
 from sqlalchemy import JSON, String, create_engine, delete, func, select, text, update
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, aliased, mapped_column
 
 
 class Base(DeclarativeBase):
@@ -125,6 +126,9 @@ class Store:
                 session.add(campaign)
                 session.flush()
             snapshot = {field: claim[field] for field in ("keys", "risk", "group", "signals")}
+            snapshot["inputs"] = claim.get("inputs", [])
+            snapshot["forensics"] = claim.get("forensics", {})
+            snapshot["sources"] = claim.get("sources", [])
             snapshots = list(session.scalars(select(Report.snapshot).where(Report.campaign == campaign.id)))
             self.rebuild(session, campaign, snapshots + [snapshot])
             session.add(Report(id=claim["id"], reporter=reporter, campaign=campaign.id, snapshot=snapshot))
@@ -165,6 +169,49 @@ class Store:
         with Session(self.engine) as session:
             campaign = session.get(Campaign, campaign_id)
             return self.describe(session, campaign) if campaign else None
+
+    def campaign_investigation(self, campaign_id):
+        with Session(self.engine) as session:
+            campaign = session.get(Campaign, campaign_id)
+            if campaign is None:
+                return None
+            detail = self.describe(session, campaign)
+            snapshots = session.scalars(select(Report.snapshot).where(Report.campaign == campaign_id)
+                                       .order_by(Report.id).limit(500))
+            inputs = Counter()
+            connections = Counter()
+            forensics = Counter()
+            sources = Counter()
+            for snapshot in snapshots:
+                modalities = set(snapshot.get("inputs", ()))
+                inputs.update(modalities)
+                kinds = set(snapshot["keys"].values())
+                connections.update((kind, modality) for kind in kinds for modality in modalities)
+                forensics.update(snapshot.get("forensics", {}))
+                sources.update(snapshot.get("sources", ()))
+
+            own = aliased(Entity)
+            shared = func.count(Entity.digest).label("shared")
+            query = (select(Campaign.id, Campaign.state, shared)
+                     .join(Entity, Campaign.id == Entity.campaign)
+                     .join(own, own.digest == Entity.digest)
+                     .where(own.campaign == campaign_id, Campaign.id != campaign_id,
+                            Campaign.state.in_(("pending", "approved")))
+                     .group_by(Campaign.id, Campaign.state)
+                     .order_by(shared.desc(), Campaign.id).limit(8))
+            related = [{"id": row.id, "state": row.state, "shared_entities": row.shared}
+                       for row in session.execute(query)]
+            return detail, {"inputs": dict(inputs), "connections": connections, "related": related,
+                            "media_evidence": dict(forensics), "source_counts": dict(sources)}
+
+    def verified_feedback(self):
+        with Session(self.engine) as session:
+            has_reports = select(Report.id).where(Report.campaign == Campaign.id).exists()
+            query = (select(Campaign).where(Campaign.state == "approved", has_reports)
+                     .order_by(Campaign.created.desc(), Campaign.id).limit(500))
+            return [{"campaign_id": row.id, "revision": row.revision,
+                     "group": row.review_group or row.group, "signals": row.signals,
+                     "review_label": "approved_campaign"} for row in session.scalars(query)]
 
     @staticmethod
     def describe(session, campaign):

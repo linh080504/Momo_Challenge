@@ -4,10 +4,11 @@ import { useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { ScanLine, ShieldCheck } from "lucide-react";
 import { Upload } from "@/components/analysis/upload";
-import { api, riskLabels, type Input, type Risk } from "@/lib/api";
+import { api, riskLabels, type Input, type Risk, type UrlCheck } from "@/lib/api";
 import { imageInput } from "@/lib/images";
 
 type QrDetails = {
+  kind: "payment";
   bank: string | null;
   bank_bin: string;
   account: string;
@@ -17,7 +18,7 @@ type QrDetails = {
   confirmed_alert: boolean;
   risk: Risk;
   disclaimer: string;
-};
+} | (UrlCheck & { kind: "url"; confirmed_alert: boolean; threat_intel_match: boolean; risk: Risk; disclaimer: string });
 type QrInput = Input & { payload?: string };
 
 export default function QrPage() {
@@ -70,11 +71,11 @@ export default function QrPage() {
   return <div className="narrow page-section">
     <section className="panel page-panel">
       <span className="heading-icon"><ScanLine size={23} /></span>
-      <h1>Kiểm tra VietQR</h1>
-      <p className="muted">Đọc ngân hàng, số tài khoản và số tiền trong mã để bạn đối chiếu người nhận.</p>
+      <h1>Kiểm tra mã QR</h1>
+      <p className="muted">Đọc thông tin người nhận trong VietQR hoặc kiểm tra tên miền trong QR liên kết.</p>
       <form className="stack" onSubmit={inspect}>
         <Upload file={file} onChange={value => { clearResult(); setFile(value); if (value) setPayload(""); }} disabled={busy} />
-        {!file && <label>Hoặc dán chuỗi VietQR
+        {!file && <label>Hoặc dán nội dung QR
           <input value={payload} maxLength={1024} disabled={busy} onChange={event => { clearResult(); setPayload(event.target.value); }} />
         </label>}
         <label>Tin nhắn đi kèm (tùy chọn)
@@ -85,7 +86,16 @@ export default function QrPage() {
       </form>
       {error && <p role="alert" className="error">{error}</p>}
     </section>
-    {result && <section className="panel page-panel">
+    {result?.kind === "url" && <section className="panel page-panel">
+      <div className="chips"><span className={"badge risk-" + result.risk}>{riskLabels[result.risk]}</span></div>
+      <h2>QR liên kết</h2>
+      <p>Tên miền đích <strong className="qr-host">{result.host}</strong></p>
+      {result.signals.length > 0 && <ul className="question-list">{result.signals.map(item => <li key={item}>{item}</li>)}</ul>}
+      {result.threat_intel_match && <p className="notice">Google Safe Browsing ghi nhận tín hiệu nguy hiểm ở tên miền.</p>}
+      {result.confirmed_alert && <p className="notice verified"><ShieldCheck size={20} /> Cảnh báo đã được chuyên viên xác nhận.</p>}
+      <p className="disclaimer">{result.disclaimer}</p>
+    </section>}
+    {result?.kind === "payment" && <section className="panel page-panel">
       <div className="chips"><span className={"badge risk-" + result.risk}>{riskLabels[result.risk]}</span></div>
       <h2>Thông tin người nhận</h2>
       <dl className="qr-data">

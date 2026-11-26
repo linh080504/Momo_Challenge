@@ -1,11 +1,11 @@
-import re
+import math
 import threading
 import time
 from collections import OrderedDict
 
 import httpx
 
-from ..privacy.entities import HOST
+from .url_gateway import is_public_domain
 
 ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 
@@ -20,14 +20,13 @@ class SafeBrowsing:
         # Query only a domain root. User paths, query strings and private hosts
         # never leave this process, so coverage is limited to domain matches.
         roots = {
-            result["registered_domain"].encode("idna").decode().rstrip(".")
+            result["registered_domain"]
             for result in domains.values()
-            if not any(signal["signal"] == "ip_url" for signal in result["signals"])
+            if result["lookup_allowed"]
         }
         candidates = [
             f"https://{root}/" for root in sorted(roots)
-            if HOST.fullmatch(root) and not re.search(r"\d{6,}", root)
-            and not root.endswith((".local", ".internal", ".test", ".localhost", ".invalid"))
+            if is_public_domain(root)
         ]
         if not candidates or not self.key:
             return False, False
@@ -46,13 +45,15 @@ class SafeBrowsing:
                       "threatInfo": {"threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE"],
                                      "platformTypes": ["ANY_PLATFORM"], "threatEntryTypes": ["URL"],
                                      "threatEntries": [{"url": url} for url in pending]}},
-                timeout=1.35,
+                timeout=1.35, follow_redirects=False, trust_env=False,
             )
             response.raise_for_status()
-            matches = {
-                row["threat"]["url"]: float(row["cacheDuration"].removesuffix("s"))
-                for row in response.json().get("matches", [])
-            }
+            matches = {}
+            for row in response.json().get("matches", []):
+                candidate = row["threat"]["url"]
+                ttl = float(row["cacheDuration"].removesuffix("s"))
+                if candidate in pending and math.isfinite(ttl) and ttl >= 0:
+                    matches[candidate] = ttl
         except (httpx.HTTPError, ValueError, AttributeError, KeyError, TypeError):
             return False, found
         with self.lock:

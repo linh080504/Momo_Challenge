@@ -5,6 +5,7 @@ import { AlertTriangle, Check, CircleHelp, Flag, Info, LockKeyhole, Share2, Shie
 import { api, ApiError, entityLabels, riskLabels, saveSession, type Analysis, type Session } from "@/lib/api";
 import { projectName } from "@/components/brand";
 import { LoginForm } from "@/components/login-form";
+import { ReceiptEvidence } from "./receipt-evidence";
 
 const sources: Record<string, string> = {
   internal_blacklist: "Chiến dịch đã duyệt",
@@ -12,9 +13,13 @@ const sources: Record<string, string> = {
   safe_browsing: "Google Safe Browsing",
   rules: "Dấu hiệu theo quy tắc",
   llm: "Mô hình phân tích",
+  vietqr: "Kiểm tra VietQR",
+  document: "Phân tích biên lai",
+  rdap: "Dữ liệu đăng ký tên miền",
+  fraud_url_ml: "Mô hình nhận diện phishing",
 };
 
-export function Result({ result, initialSession }: { result: Analysis; initialSession: Session | null }) {
+export function Result({ result, initialSession, receipt }: { result: Analysis; initialSession: Session | null; receipt?: File | null }) {
   const [session, setSession] = useState(initialSession);
   const [signingIn, setSigningIn] = useState(false);
   const [reported, setReported] = useState(false);
@@ -75,12 +80,25 @@ export function Result({ result, initialSession }: { result: Analysis; initialSe
       <div className="result-body">
         {confirmed && <p className="notice verified"><ShieldCheck size={20} /> Cảnh báo đã được chuyên viên xác nhận.</p>}
         {result.degraded && <p className="notice"><Info size={19} /> Chế độ hạn chế. Một phần dịch vụ đối chiếu hoặc mô hình đang tắt hoặc gián đoạn.</p>}
+        {result.document && <ReceiptEvidence evidence={result.document} file={receipt} />}
+        {result.url_checks && <details className="details">
+          <summary>Kiểm tra tên miền</summary>
+          <ul className="evidence">{result.url_checks.map((item, index) => <li key={item.host + index}>
+            <strong className="qr-host">{item.host}</strong>
+            {item.domain_age_days !== null && <p>Đã đăng ký {item.domain_age_days} ngày trước</p>}
+            {item.signals.map(signal => <p key={signal}>{signal}</p>)}
+          </li>)}</ul>
+        </details>}
         <h3>Dấu hiệu nhận thấy</h3>
         {result.red_flags.length ? <ul className="flag-list">{result.red_flags.map(flag =>
           <li key={flag.quote + flag.reason}><blockquote>“{flag.quote}”</blockquote><p>{flag.reason}</p></li>
         )}</ul> : <p className="muted">Chưa có đủ câu chữ để trích dẫn trực tiếp.</p>}
         <h3><CircleHelp size={19} /> Câu hỏi kiểm chứng</h3>
         <ul className="question-list">{result.verification_questions.map(question => <li key={question}>{question}</li>)}</ul>
+        {!!result.guidance?.length && <details className="details">
+          <summary>Hướng dẫn theo nhóm thủ đoạn</summary>
+          <ul className="question-list">{result.guidance.map(item => <li key={item.id}>{item.text}</li>)}</ul>
+        </details>}
         {(result.entities.length > 0 || result.evidence.length > 0) &&
           <details className="details">
             <summary>Xem bằng chứng và thông tin đã trích</summary>

@@ -104,3 +104,39 @@ Người kiểm: gate-check (độc lập, kiểm lại từ đầu, không tin 
 - Kiểm thử local đạt 30 ca Python và một ca e2e trên trình duyệt. Ca e2e gửi ảnh PNG tổng hợp qua OCR, tạo link chia sẻ, báo cáo, duyệt và kiểm tra cảnh báo ở khổ 390px. Giao diện cũng đã được kiểm ở khổ 1280px. Next.js build và `docker compose config --quiet` đều thành công.
 - Eval smoke local trên 23 mẫu tổng hợp, gồm 18 văn bản và 5 ảnh. Recall 1,00, báo nhầm 0,00, p95 văn bản 0,028 giây, p95 ảnh 0,62 giây, 0 lỗi API. Kết quả áp dụng cho tập kiểm tra kỹ thuật này.
 - Bản public, model/Safe Browsing với khóa thật, PostgreSQL trên Supabase và eval chính thức vẫn cần xác minh. Báo cáo chất lượng vòng thi cần tập gán nhãn thật, holdout và kết quả thử với người dùng.
+
+## 2026-11-27 — Bản nâng cấp chạy local
+
+| Hạng mục | Bằng chứng hiện có | Việc tiếp theo |
+|---|---|---|
+| Cổng bảo mật, URL và QR | Kiểm thử chuẩn hóa IDN, nhận diện ký tự tương tự, QR liên kết, CRC VietQR và lọc dữ liệu trước khi gọi dịch vụ ngoài. RDAP `.com`/`.net` đã được kiểm thử bằng phản hồi mô phỏng. | Xác minh nguồn Safe Browsing và RDAP trên môi trường thử, rà quyền truy cập và giới hạn egress. |
+| Qwen và biên lai | Qwen4-Max đã trả HTTP 200 qua QwenCloud Singapore. Một ca biên lai chạy Qwen thật, trả 8 vùng OCR và trạng thái giao dịch `unverified`. | Chạy eval chính thức, so sánh PaddleOCR/VLM, bổ sung bằng chứng bố cục và mẫu ảnh bị nén. |
+| Ghi âm | Có form tải bản ghi, chuyển WAV mono 16 kHz và adapter Whisper cục bộ. Kiểm thử đã mô phỏng lệnh phiên âm. | Cài `whisper-cli` và trọng số, thử ghi âm thật đã xin phép, đo độ chính xác và độ trễ. |
+| FraudURL và mô hình chuyên biệt | Huấn luyện, tạo manifest và nạp artifact FraudURL thành công trên dữ liệu tổng hợp. | Chuẩn bị dữ liệu đã xác minh để đánh giá và bật model. Các ứng viên FraudBERT, FraudDoc, FraudVoice và FraudFusion đang ở lộ trình. |
+| Workspace và phản hồi | Playwright chạy qua báo cáo ảnh, mở đồ thị, chọn thực thể đã ẩn danh, duyệt và thấy cảnh báo ở lần kiểm tra lại. API phản hồi có kiểm tra vai trò và chỉ trả hồ sơ đã duyệt còn báo cáo. | Đo trên hồ sơ được phép dùng, hoàn thiện active learning, nâng đồ thị và tích hợp kênh cảnh báo được cấp quyền. |
+| Kiểm thử và phát hành | 37 bài pytest đạt. Luồng Playwright chạy riêng thành công. Trình duyệt khổ 390px đã hiển thị vùng chữ trên ảnh biên lai và kiểm tra được QR liên kết. | Kiểm chứng staging/public, PostgreSQL/Supabase, eval chính thức và các phiên thử người dùng. |
+
+Ưu tiên hiện tại là U-01 đến U-04 gồm dữ liệu, baseline, rà bảo mật và FraudURL. Kết quả thử local và dữ liệu tổng hợp được ghi theo phạm vi thử kỹ thuật. [Công việc nâng cấp](TASKS.md#công-việc-nâng-cấp-paypause-ai) · [Kịch bản nghiệm thu](USER_TESTS.md#kịch-bản-nghiệm-thu-bản-nâng-cấp)
+
+Gói triển khai tiếp theo bắt đầu bằng hợp đồng sáu đầu vào và đo lại baseline. QA chuẩn bị hướng dẫn gán nhãn và tập URL song song để sẵn sàng cho đánh giá FraudURL. [Gói triển khai đầu tiên](TASKS.md#gói-triển-khai-đầu-tiên)
+
+## Tiến độ thực hiện 15 bước
+
+| Bước | Trạng thái | Bằng chứng hoặc việc chuyển tiếp |
+|---|---|---|
+| 1 · Hợp đồng và hai luồng sản phẩm | Hoàn thành | Có ma trận sáu đầu vào, quyền và lỗi ở Product Brief. OpenAPI mô tả NDJSON và hai dạng kết quả QR. Kiểm thử API đạt 23 ca. PostgreSQL chờ kiểm ở bước 2. |
+| 2 · Môi trường và baseline | Hoàn thành trong phạm vi staging local | Compose chạy FE `3020`, API `8020` và PostgreSQL `55432` trên loopback, dùng volume riêng và migration `001_mvp.sql`. 41 bài kiểm thử đạt, gồm Playwright và PostgreSQL. Smoke Qwen4-Max `signals-v2` trên 23 mẫu tổng hợp đạt recall 1,00, báo nhầm 0,00, p95 văn bản 1,572 giây, p95 ảnh 2,159 giây và 0 lỗi. Staging từ xa và số đo chất lượng trên dữ liệu thật nằm ở mốc phát hành. |
+| 3 · Cổng bảo mật | Hoàn thành luồng local | Cập nhật snapshot Public Suffix List, phân biệt tenant dùng chung, giới hạn tra cứu tới endpoint cố định và giữ đường dẫn riêng ngoài yêu cầu mạng. RDAP Verisign đã trả bằng chứng tuổi tên miền qua API. Safe Browsing qua test mô phỏng, khóa thật và chính sách mạng/lưu trữ môi trường đích chờ xác minh. |
+| 4 · Dataset, tri thức và nội dung | Có bộ công cụ. Chờ dữ liệu đã duyệt | Eval gửi được sáu loại đầu vào và tách số mẫu, p95, lỗi theo loại. Có hướng dẫn gán nhãn và mẫu manifest. Tập tổng hợp dùng để chạy thử kỹ thuật. Tập đã xác minh và holdout cần bàn giao trước khi chốt chất lượng hoặc kích hoạt model ứng viên. |
+| 5 · Sáu đầu vào và giao diện | Hoàn thành phần tích hợp local | Bật Whisper `base-q5_1` cho staging thử, API nhận WAV tiếng Việt tổng hợp và trả HTTP 200 trong 3,1 giây. Bộ kiểm thử cuối đạt 45 ca, gồm luồng trình duyệt ở 390px và 1280px, biên lai, QR liên kết, ghi âm và PostgreSQL. Whisper `large-v3-turbo-q5_0` đã chạy thử riêng. |
+| 6–9 · Mô hình chuyên biệt, pháp y, RAG và đồ thị | Chờ benchmark chính thức | Cần tập train/holdout được duyệt theo từng tác vụ. Các thành phần local hiện có làm baseline. Chưa kích hoạt model huấn luyện từ dữ liệu smoke. |
+| 10–13 · Workspace, cảnh báo và vòng học | Có luồng cơ bản. Còn phần mở rộng | Hồ sơ, quyền chuyên viên và cảnh báo sau duyệt đã qua staging local. Cần đo hiệu quả vận hành, gán nhãn cấp mẫu, thử registry và cấp quyền trước khi nối kênh cảnh báo hoặc nguồn giao dịch. |
+| 14–15 · Pilot và phát hành | Chưa nghiệm thu | Cần kết quả eval holdout, các phiên thử với người dùng, hạ tầng phát hành và xác nhận quyền của các dịch vụ cần mở. |
+
+### Phát hiện trong lượt smoke mở rộng
+
+Với 29 mẫu tổng hợp đủ sáu đầu vào, API xử lý đủ lượt và recall đạt 1,00. FPR theo quy ước hiện tại là **33,3%** (4/12), vượt cổng 10%. Bốn mẫu hợp lệ trả `uncertain` gồm tên miền chính thức, VietQR, biên lai chưa xác minh và ghi âm. Giữ quy ước tính `uncertain` vào nhóm cảnh báo. Theo dõi thêm số ca `uncertain` theo kênh để bước 8–9 đánh giá lại định tuyến và hiệu chuẩn trên tập chính thức. [Hướng dẫn đánh giá](../eval/README.md#chuẩn-bị-dữ-liệu-sáu-đầu-vào)
+
+Trên một câu tổng hợp tiếng Việt dài 3,5 giây, `base-q5_1` có WER 80% và `large-v3-turbo-q5_0` có WER 50%. Hai phép đo dùng 10 từ tham chiếu và xác nhận sự khác biệt trong một ca thử. Cần đo lại với ghi âm thật trước khi chọn model ASR. [Whisper cho staging](../infra/deploy/README.md#bật-nhận-dạng-ghi-âm-ở-staging)
+
+[Kế hoạch xây dựng từng bước](PLAN.md#kế-hoạch-xây-dựng-từng-bước) · [Hợp đồng sáu đầu vào](PRODUCT_BRIEF.md#hợp-đồng-sáu-đầu-vào-và-hai-luồng-sản-phẩm)

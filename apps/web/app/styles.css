@@ -102,6 +102,22 @@ input::placeholder, textarea::placeholder { color: #786776; opacity: 1; }
 .upload-target strong { font-size: 1rem; }
 .upload-target small { color: var(--muted); font-size: .83rem; font-weight: 500; }
 .upload:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+.receipt-preview { position: relative; display: table; margin: 1rem auto; max-width: 100%; }
+.receipt-preview img { display: block; width: auto; max-width: 100%; border-radius: .45rem; }
+.receipt-preview span { position: absolute; border: 1px solid; pointer-events: none; }
+.ocr-box { color: #872362; background: #dd3e9c24; }
+.compression-box { color: #9c4015; background: #f1974840; }
+.qr-host { overflow-wrap: anywhere; }
+.investigation-workspace { display: grid; gap: .6rem; margin: 1.25rem 0; }
+.investigation-workspace h3, .investigation-workspace > p { margin: 0; }
+.investigation-graph { max-width: 36rem; margin-inline: auto; }
+.graph-map { position: relative; aspect-ratio: 1; width: 100%; container-type: inline-size; background: #fff8fc; border-radius: 1rem; }
+.graph-line { position: absolute; transform-origin: left; border-top: 1px dashed #dcb6ca; }
+.graph-line.active { border-top: 2px solid #ba246c; }
+.graph-node { position: absolute; transform: translate(-50%, -50%); width: 23%; min-height: 12%; padding: .25rem; display: grid; place-content: center; background: white; border-radius: .75rem; border: 1px solid #dca1c1; color: #6d214c; text-align: center; font-size: clamp(.66rem, 3cqw, .88rem); overflow-wrap: anywhere; }
+.graph-node[aria-pressed="true"] { color: white; background: #a61761; border-color: #a61761; }
+.graph-details { padding: .75rem; }
+.graph-details ul { display: flex; flex-wrap: wrap; gap: .3rem 1rem; padding-left: 1rem; }
 .icon-button { display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); width: 44px; height: 44px; margin: .2rem; border-radius: 10px; }
 .icon-button:hover { background: var(--tint); }
 .button { display: inline-flex; align-items: center; justify-content: center; min-height: 47px; padding: .6rem .9rem; gap: .55rem; border: 1px solid transparent; border-radius: 11px; font-weight: 750; text-decoration: none; line-height: 1.25; text-align: center; }

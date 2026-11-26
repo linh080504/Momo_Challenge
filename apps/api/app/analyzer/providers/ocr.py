@@ -1,5 +1,6 @@
 import base64
 import binascii
+import csv
 import io
 import subprocess
 
@@ -54,21 +55,49 @@ def read_image(image, settings):
 
 
 def recognize(image, settings):
+    return _recognize(image, settings, boxes=False)[0]
+
+
+def _recognize(image, settings, *, boxes):
+    image = image.copy()
     image.thumbnail((2000, 2000))
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     try:
         if settings.ocr_command:
             result = subprocess.run(
-                [settings.ocr_command, "stdin", "stdout", "-l", settings.ocr_languages, "--psm", "11"],
+                [settings.ocr_command, "stdin", "stdout", "-l", settings.ocr_languages, "--psm", "11"]
+                + (["tsv"] if boxes else []),
                 input=buffer.getvalue(), capture_output=True, check=True, timeout=5,
             )
             text = result.stdout.decode("utf-8", errors="replace")
         else:
-            text = read_media("ocr", buffer.getvalue(), settings, timeout=6)
+            text = read_media("ocr-tsv" if boxes else "ocr", buffer.getvalue(), settings, timeout=6)
     except (OSError, subprocess.SubprocessError) as exc:
         raise AnalyzerError(503, "Bộ đọc chữ đang gián đoạn. Bạn có thể thử dán nội dung tin nhắn.") from exc
-    text = text.strip()
-    if not any(char.isalnum() for char in text):
-        raise AnalyzerError(422, "Chưa đọc được chữ trong ảnh. Hãy dùng ảnh rõ hơn hoặc dán nội dung.")
-    return text[:12000]
+    if not boxes:
+        if not any(char.isalnum() for char in text):
+            raise AnalyzerError(422, "Chưa đọc được chữ trong ảnh. Hãy dùng ảnh rõ hơn hoặc dán nội dung.")
+        return text.strip()[:12000], []
+    words, regions = [], []
+    for row in csv.DictReader(io.StringIO(text), delimiter="\t"):
+        word = (row.get("text") or "").strip()
+        if row.get("level") != "5" or not word:
+            continue
+        try:
+            left, top, width, height = (int(row[key]) for key in ("left", "top", "width", "height"))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (0 <= left < left + width <= image.width and 0 <= top < top + height <= image.height):
+            continue
+        words.append(word)
+        regions.append([round(value, 4) for value in (left / image.width, top / image.height,
+                                                       width / image.width, height / image.height)])
+        if len(regions) == 250:
+            break
+    return " ".join(words)[:12000], regions
+
+
+def read_document(image, settings):
+    with media_slot():
+        return _recognize(image, settings, boxes=True)

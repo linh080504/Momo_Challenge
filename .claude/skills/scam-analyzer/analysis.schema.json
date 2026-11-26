@@ -39,7 +39,7 @@
       "items": {
         "type": "object", "required": ["source", "finding"],
         "properties": {
-          "source": {"type": "string", "enum": ["internal_blacklist", "safe_browsing", "domain_check", "rdap", "vietqr", "rules", "llm"]},
+          "source": {"type": "string", "enum": ["internal_blacklist", "safe_browsing", "domain_check", "rdap", "vietqr", "rules", "llm", "document", "fraud_url_ml"]},
           "finding": {"type": "string"},
           "weight": {"type": "integer"}
         }
@@ -47,9 +47,38 @@
     },
     "ai_disclaimer": {"type": "string", "const": "Kết quả do AI phân tích và có thể sai. Hãy xác minh qua số tổng đài chính thức trước khi chuyển tiền."},
     "model": {"type": "string"},
+    "analysis_path": {"enum": ["fast", "deep"]},
+    "specialized_models": {"type": "object", "properties": {"fraud_url": {"type": "string"}}},
+    "guidance": {"type": "array", "maxItems": 3, "items": {
+      "type": "object", "required": ["id", "text"],
+      "properties": {"id": {"type": "string"}, "text": {"type": "string"}}
+    }},
+    "url_checks": {"type": "array", "maxItems": 6, "items": {
+      "type": "object", "required": ["host", "level", "signals", "domain_age_days"],
+      "properties": {
+        "host": {"type": "string"},
+        "level": {"enum": ["low", "medium", "high"]},
+        "signals": {"type": "array", "items": {"type": "string"}},
+        "domain_age_days": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }},
+    "document": {
+      "type": "object",
+      "required": ["ocr_boxes", "recompression_regions", "signals", "transaction_status", "notice"],
+      "properties": {
+        "ocr_boxes": {"type": "array", "maxItems": 250, "items": {"$ref": "#/$defs/box"}},
+        "recompression_regions": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/box"}},
+        "signals": {"type": "array", "items": {"type": "object", "required": ["category", "finding"], "properties": {
+          "category": {"enum": ["physical", "visual", "semantic"]}, "finding": {"type": "string"}
+        }}},
+        "transaction_status": {"const": "unverified"},
+        "notice": {"type": "string"}
+      }
+    },
     "prompt_version": {"type": "string"},
     "latency_ms": {"type": "integer"},
     "degraded": {"type": "boolean", "description": "Dùng chế độ hạn chế khi thiếu một nguồn đối chiếu hoặc mô hình"},
     "analysis_id": {"type": "string", "description": "Bằng chứng có chữ ký, hiệu lực 30 phút để gửi báo cáo hoặc tạo link chia sẻ"}
-  }
+  },
+  "$defs": {"box": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number", "minimum": 0, "maximum": 1}}}
 }

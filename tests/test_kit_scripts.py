@@ -200,6 +200,37 @@ def test_run_eval_sends_image_payload_and_reports_p95_by_type():
     assert base64.b64decode(received[2]["image_base64"]) == JPG_BYTES
 
 
+def test_run_eval_sends_new_modalities_without_reference_labels(tmp_path):
+    server, received = _serve()
+    try:
+        image = tmp_path / "receipt.png"
+        image.write_bytes(PNG_BYTES)
+        audio = tmp_path / "sample.wav"
+        audio.write_bytes(b"synthetic-audio-fixture")
+        rows = [
+            {"url": "https://example.org/"},
+            {"qr_payload": "https://example.org/"},
+            {"audio": str(audio), "transcript": "benchmark reference"},
+            {"image": str(image), "image_kind": "receipt", "transcript": "OCR reference"},
+        ]
+        data = _dataset(tmp_path, [{"id": str(i), "label": "scam", "group": "G5", "synthetic": True, **row}
+                                   for i, row in enumerate(rows)])
+        url = f"http://127.0.0.1:{server.server_port}/v1/analyze"
+        _, report = _run(["--data", data, "--endpoint", url, "--out", str(tmp_path / "out")])
+    finally:
+        server.shutdown()
+        server.server_close()
+    summary = report["summary"]
+    assert summary["synthetic_count"] == 4
+    assert all(summary["by_input"][kind]["n"] == 1 and summary["by_input"][kind]["errors"] == 0
+               for kind in ("url", "qr", "audio", "receipt"))
+    assert received[0] == {"text": "", "url": "https://example.org/"}
+    assert received[1] == {"text": "", "qr_payload": "https://example.org/"}
+    assert base64.b64decode(received[2]["audio_base64"]) == audio.read_bytes()
+    assert received[3]["image_kind"] == "receipt"
+    assert all("transcript" not in payload and "label" not in payload for payload in received)
+
+
 def test_run_eval_p95_gates_are_separate():
     server, _ = _serve(image_delay=0.15)
     try:
