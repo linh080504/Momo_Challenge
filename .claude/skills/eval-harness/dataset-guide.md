@@ -6,7 +6,9 @@ Mẫu văn bản:
 
 ```json
 {"id": "s042", "text": "...", "label": "scam", "group": "G1", "channel": "zalo",
- "tags": ["hard_positive"], "synthetic": false, "source": "thanh-vien-A"}
+ "tags": ["hard_positive"], "synthetic": false, "source": "thanh-vien-A",
+ "source_url": "https://...", "source_date": "2026-11-20", "provenance": "quote",
+ "scenario_id": "G1.5", "notes": "che tên người nhận"}
 ```
 
 Mẫu ảnh (thêm trường `image`):
@@ -14,12 +16,28 @@ Mẫu ảnh (thêm trường `image`):
 ```json
 {"id": "s043", "text": "", "label": "scam", "group": "G5", "channel": "zalo",
  "tags": ["image"], "synthetic": false, "source": "thanh-vien-B",
+ "source_url": "https://...", "source_date": "2026-11-20", "provenance": "screenshot",
+ "scenario_id": "G5.1",
  "image": "eval/images/s043.png", "transcript": "chép lại chữ trong ảnh, chỉ để người duyệt nhãn đọc"}
 ```
 
 - `label`: `scam` | `legit`. `group`: G1–G5 theo taxonomy (null nếu legit).
-- `tags`: `hard_positive` (lừa đảo khó nhận ra), `hard_negative` (tin thật dễ bị báo nhầm: OTP ngân hàng, shipper, khuyến mãi thật), `injection` (có câu ra lệnh cho AI), `image`, `audio`, `qr`.
+- `tags`: `hard_positive` (lừa đảo khó nhận ra), `hard_negative` (tin thật dễ bị báo nhầm: OTP ngân hàng, shipper, khuyến mãi thật), `injection` (có câu ra lệnh cho AI), `image`, `audio`, `qr`, `annotated`, `stitched` (hai tag cuối: xem bên dưới). Danh sách tag hợp lệ đầy đủ: `TAGS` trong `eval/tools/validate_dataset.py`.
 - `synthetic: true` nếu do đội tự viết. Báo cáo trên slide phải ghi tỷ lệ mẫu tổng hợp.
+
+### Trường bổ sung (DECISIONS 2026-11-26; nguồn mô tả: `docs/DATA_SOURCES.md` mục 4)
+
+| Trường | Bắt buộc | Ý nghĩa |
+|---|---|---|
+| `source_url` | Có | Đường dẫn http(s) tới bài/nguồn gốc của mẫu. Ảnh gốc để ngoài repo; muốn dựng lại phải tải lại từ đây |
+| `source_date` | Có | Ngày đăng của nguồn, dạng `YYYY-MM-DD` |
+| `provenance` | Có | `screenshot` ảnh chụp màn hình thật · `photo` chụp màn hình điện thoại bằng máy ảnh · `official_mock` đồ họa do cơ quan/ngân hàng/ví dựng lại, **không phải tin của nạn nhân** (không tính vào chỉ tiêu ảnh thật) · `quote` trích nguyên văn trong bài · `dataset` bộ dữ liệu nghiên cứu công bố |
+| `scenario_id` | Không | Mã kịch bản con theo `taxonomy.md` (vd `G1.7`); phải bắt đầu bằng `group` của mẫu; `null` nếu legit |
+| `notes` | Không | Ghi chú cách xử lý: che gì, ghép trích dẫn thế nào, chỗ nghi nhãn |
+
+- Tag `annotated`: ảnh gốc đã có dấu X đỏ, dấu "GIẢ MẠO" hoặc chú thích do nguồn thêm (tự lộ đáp án) → **báo recall riêng**, ưu tiên thu ảnh không chú thích.
+- Tag `stitched`: văn bản do ghép nhiều trích dẫn rời trong cùng bài (báo không đăng nguyên hội thoại).
+- `run_eval.py` chỉ gửi `text` và `image` lên API; các trường trên không đi vào analyzer. Kiểm bằng `python3 eval/tools/validate_dataset.py eval/dataset.jsonl`; recall theo tag/provenance/kịch bản: `eval/tools/recall_by_tag.py`.
 
 ### Trường `image` và cách `run_eval.py` gửi mẫu
 

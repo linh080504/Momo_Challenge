@@ -16,4 +16,7 @@ jobs:
         run: python3 tests/test_kit_scripts.py
       # Khong can secret: test tu cap khoa gia cho ENTITY_HASH_KEY, dung SQLite tam, analyzer duoc monkeypatch.
       - name: Test API
-        run: python3 -m pytest apps/api
+        working-directory: apps/api
+        run: |
+          python3 -m pytest tests
+          python3 -m pytest app/analyzer/tests
