@@ -115,8 +115,10 @@ def _run(argv):
             os.environ.pop("NO_PROXY", None)
         else:
             os.environ["NO_PROXY"] = old_no_proxy
-    report = next(p for p in out_dir.glob("*.json") if p.name != "latest.json")
-    return code, json.loads(report.read_text(encoding="utf-8"))
+    report = next(p for p in out_dir.glob("*.json") if p.name not in {"latest.json", "last_run.json"})
+    parsed = json.loads(report.read_text(encoding="utf-8"))
+    assert json.loads((out_dir / "last_run.json").read_text(encoding="utf-8")) == parsed["summary"]
+    return code, parsed
 
 
 def _dataset(directory, rows):

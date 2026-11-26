@@ -96,3 +96,11 @@ Người kiểm: gate-check (độc lập, kiểm lại từ đầu, không tin 
 | F7 | `.env.example`: thêm `NEXT_PUBLIC_API_URL` (deploy-runbook setup #2) và biến cho 2 tài khoản test của M6; `TELEGRAM_BOT_TOKEN` đã xuống Could — ghi chú "chưa dùng vòng này" | **backend-engineer** | File có đủ biến khi dựng `apps/api`/`apps/web` |
 
 **Chặn đường mới:** repo đã mở nên hợp đồng "commit stub `analyze()` trước 10:00 ngày 2" (`docs/TASKS.md` D2-AI-00) đã khả thi. Chặn đường còn lại là **F1c (tài khoản dịch vụ)** — không có key LLM thì mốc 14:00 ngày 2 "URL API staging" chỉ trả được stub, và **F4** — không có dữ liệu thật thì số đo lần 1 của G1 sẽ vẫn chạy trên mẫu tổng hợp.
+
+## 2026-11-26 — MVP chạy local
+
+- Next.js và FastAPI đã nối luồng kiểm tra chữ/ảnh, trả tiến trình và kết quả có bằng chứng. OCR tiếng Việt chạy cục bộ. Chế độ hạn chế hoạt động khi chưa có khóa dịch vụ.
+- Hai vai user/ops, gửi báo cáo, gom chiến dịch theo thực thể, sửa nhóm, duyệt/bác bỏ, nhật ký và cảnh báo ở lần kiểm tra sau đã có trong mã. Đã có kiểm tra/tạo lại VietQR và chia sẻ tóm tắt 24 giờ.
+- Kiểm thử local đạt 30 ca Python và một ca e2e trên trình duyệt. Ca e2e gửi ảnh PNG tổng hợp qua OCR, tạo link chia sẻ, báo cáo, duyệt và kiểm tra cảnh báo ở khổ 390px. Giao diện cũng đã được kiểm ở khổ 1280px. Next.js build và `docker compose config --quiet` đều thành công.
+- Eval smoke local trên 23 mẫu tổng hợp, gồm 18 văn bản và 5 ảnh. Recall 1,00, báo nhầm 0,00, p95 văn bản 0,028 giây, p95 ảnh 0,62 giây, 0 lỗi API. Kết quả áp dụng cho tập kiểm tra kỹ thuật này.
+- Bản public, model/Safe Browsing với khóa thật, PostgreSQL trên Supabase và eval chính thức vẫn cần xác minh. Báo cáo chất lượng vòng thi cần tập gán nhãn thật, holdout và kết quả thử với người dùng.

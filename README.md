@@ -2,6 +2,41 @@
 
 Bộ kit biến Claude Code thành một đội 7 thành viên AI có vai rõ ràng, 9 skill chuyên môn và các "hàng rào" an toàn, dùng chung cho cả đội qua git. Mỗi người trong đội lái một agent đúng vai của mình; PM điều phối bằng kế hoạch 14 ngày ở `docs/PLAN.md`.
 
+## Chạy MVP trên máy
+
+Cần Python 3.12+ và Node.js 24. OCR tiếng Việt và đọc QR chạy cục bộ. SQLite dùng cho máy phát triển. Bản public dùng migration PostgreSQL/Supabase.
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r apps/api/requirements-dev.txt
+npm.cmd ci --prefix apps/api/tools/media
+npm.cmd ci --prefix apps/web
+.\.venv\Scripts\python.exe infra/setup_local.py
+```
+
+Mở hai terminal ở gốc repo và chạy mỗi lệnh trong một terminal. Trên macOS/Linux dùng `python3`, `.venv/bin/python` và `npm`.
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8000 --no-access-log
+npm.cmd run dev --prefix apps/web
+```
+
+- Web tại **http://localhost:3000**, API docs tại **http://localhost:8000/docs**, bàn vận hành tại **http://localhost:3000/ops**.
+- Hai tài khoản demo local có trong `.env` vừa tạo. Đăng nhập vai người dùng để báo cáo. Đăng nhập vai vận hành trong cửa sổ riêng để duyệt. Kiểm tra lại nội dung trùng số tài khoản, số điện thoại hoặc tên miền để thấy cảnh báo đã xác nhận.
+- Có thể dùng `docker compose up --build` sau khi tạo `.env`. Compose chạy API và web trên máy, lưu DB trong volume riêng.
+- Đặt `LLM_BASE_URL` (tới gốc API tương thích Chat Completions, thường kết thúc bằng `/v1`), `LLM_API_KEY`, `LLM_MODEL`, `LLM_FALLBACK_MODEL` và `SAFE_BROWSING_KEY` nếu có tài khoản dịch vụ. Chế độ hạn chế dùng luật và dữ liệu nội bộ. Google Safe Browsing chỉ đối chiếu tên miền gốc, với độ phủ giới hạn theo tên miền.
+
+### Kiểm tra và triển khai
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+npm.cmd run build --prefix apps/web
+.\.venv\Scripts\python.exe eval/prepare_smoke.py
+.\.venv\Scripts\python.exe .claude/skills/eval-harness/scripts/run_eval.py --data eval/generated/dataset.smoke.jsonl --endpoint http://localhost:8000/v1/analyze --tag smoke-local --out eval/generated/reports
+```
+
+Tập smoke có văn bản và ảnh **tổng hợp**. Các mẫu này dùng để kiểm tra kết nối API và OCR. [Quy trình eval](eval/README.md) · [Triển khai public và smoke test](infra/deploy/README.md) · [Kịch bản thử cho BGK](submission/guide/HUONG_DAN.md)
+
 ## 1. Bộ kit gồm gì
 
 ```
@@ -43,6 +78,29 @@ tests/test_kit_scripts.py     test cho các script trong kit
 | `gate-check` | `/gate-check G0\|G1\|G2\|G3` | Kiểm cổng bằng bằng chứng, chạy trong subagent riêng |
 
 Skill "gọi tay" đặt `disable-model-invocation: true` để Claude không tự deploy hay tự nộp bài.
+
+### Cấu trúc mã nguồn MVP
+
+Cấu trúc dưới đây bám theo [Product Brief](docs/PRODUCT_BRIEF.md), [kế hoạch 14 ngày](docs/PLAN.md) và [hợp đồng ngày 2](docs/TASKS.md#hợp-đồng-nối-việc-ngày-2-chốt-trước-1000-đổi-phải-ghi-decisions). Các thư mục chứa tài sản của đội có thể bắt đầu từ `.gitkeep`.
+
+| Đường dẫn | Nội dung dự kiến | Chủ trì |
+|---|---|---|
+| `apps/web/app/(public)/` · `apps/web/components/analysis/` | Next.js cho người dùng. Một ô nhập văn bản hoặc ảnh, nén ảnh, tiến trình xử lý, thẻ kết quả có trích dẫn và nút báo cáo. | FE |
+| `apps/web/app/login/` · `apps/web/app/ops/[campaignId]/` · `apps/web/components/ops/` | Đăng nhập vai người dùng và vận hành. Hàng chờ tại `/ops`, chi tiết chiến dịch, bằng chứng, duyệt hoặc bác bỏ và lịch sử. | FE |
+| `apps/web/app/qr/` · `apps/web/app/share/[token]/` | Hai mục Should. Kiểm tra VietQR và xem tóm tắt đã che dữ liệu cá nhân qua link chia sẻ hết hạn sau 24 giờ. | FE |
+| `apps/web/lib/` · `apps/web/public/` | Client gọi API, kiểu dữ liệu giao diện, tiện ích xử lý ảnh và tài nguyên tĩnh. | FE |
+| `apps/api/app/api/` · `apps/api/app/schemas/` | FastAPI cho health check, phân tích, báo cáo, vận hành, QR và chia sẻ. Nhận ảnh PNG/JPEG qua JSON base64, tối đa 5 MB byte gốc. Kiểm tra đầu vào và đầu ra theo hợp đồng. | BE |
+| `apps/api/app/analyzer/{agents,pipeline,providers}/` | Nơi xây agent chạy trong sản phẩm, pipeline đọc ảnh → trích thực thể → che dữ liệu → tra bằng chứng → suy luận → chấm điểm và hậu kiểm. Adapter cho OCR, model chính và dự phòng. | AI |
+| `apps/api/app/evidence/` · `apps/api/app/privacy/` | Kiểm tra tên miền, Google Safe Browsing và danh sách nội bộ đã duyệt. Che dữ liệu cá nhân trước khi chuyển ra ngoài, chuẩn hóa thực thể và kiểm soát dữ liệu lưu. | AI · BE |
+| `apps/api/app/{reports,ops,auth,db}/` | Nhận báo cáo, gom theo tài khoản, số điện thoại hoặc tên miền, tạo hồ sơ chiến dịch, phân quyền và ghi nhật ký duyệt. Cảnh báo đã xác nhận xuất hiện khi người dùng kiểm tra lại đầu vào liên quan sau khi chuyên viên duyệt. | BE · AI |
+| `apps/api/app/{qr,sharing}/` | Đọc và đối chiếu VietQR, tạo lại QR sau khi người dùng xác nhận người nhận, tạo link chia sẻ có thời hạn. | BE |
+| `prompts/` · `.claude/skills/scam-analyzer/` | Prompt có phiên bản, taxonomy và JSON Schema dùng chung cho API, web và eval. | AI |
+| `eval/` · `eval/images/` · `eval/reports/` | Dữ liệu JSONL, ảnh test đã ẩn danh và báo cáo. `dataset.example.jsonl` có mẫu tổng hợp. `dataset.jsonl` dành cho tập đánh giá của đội. `holdout.jsonl` do QA giữ riêng. | QA |
+| `apps/api/tests/` · `tests/e2e/` · `.github/workflows/` | Test API, kiểm thử luồng ảnh → kết quả → báo cáo → duyệt → cảnh báo, và CI. | BE · QA |
+| `infra/docker/` · `infra/supabase/migrations/` · `infra/deploy/{api,web}/` | Vị trí cho cấu hình container, migration PostgreSQL/Supabase và triển khai API với web public. Quy trình smoke test và rollback nằm trong skill `deploy-runbook`. | BE |
+| `docs/` · `submission/{guide,source,slides,video}/` | Kế hoạch, nhật ký, kiểm thử người dùng và bốn thành phần bài nộp theo mẫu đã có. | PM · pitch-writer |
+
+Agent trong `.claude/agents/` hỗ trợ đội phát triển. Agent trong `apps/api/app/analyzer/agents/` thuộc mã chạy của sản phẩm. Vòng MVP ưu tiên ảnh và văn bản, bao gồm URL cần kiểm tra. Ghi âm, bảng tổng quan và cảnh báo qua email/SMS thuộc phần mở rộng trong [PLAN](docs/PLAN.md#hạng-mục-mở-rộng).
 
 ## 2. Cài đặt (khoảng 10 phút)
 

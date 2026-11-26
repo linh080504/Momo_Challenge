@@ -48,6 +48,8 @@
     "ai_disclaimer": {"type": "string", "const": "Kết quả do AI phân tích và có thể sai. Hãy xác minh qua số tổng đài chính thức trước khi chuyển tiền."},
     "model": {"type": "string"},
     "prompt_version": {"type": "string"},
-    "latency_ms": {"type": "integer"}
+    "latency_ms": {"type": "integer"},
+    "degraded": {"type": "boolean", "description": "Dùng chế độ hạn chế khi thiếu một nguồn đối chiếu hoặc mô hình"},
+    "analysis_id": {"type": "string", "description": "Bằng chứng có chữ ký, hiệu lực 30 phút để gửi báo cáo hoặc tạo link chia sẻ"}
   }
 }

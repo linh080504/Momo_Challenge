@@ -12,3 +12,11 @@ dist/
 *.pyc
 .DS_Store
 .claude/settings.local.json
+*.sqlite3
+*.sqlite3-*
+.pytest_cache/
+*.tsbuildinfo
+apps/web/next-env.d.ts
+eval/raw-notes/
+eval/reports/last_run.json
+eval/generated/

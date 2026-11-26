@@ -32,6 +32,7 @@ import argparse
 import base64
 import datetime as dt
 import json
+import os
 import pathlib
 import re
 import statistics
@@ -98,11 +99,17 @@ def build_payload(row: dict) -> dict:
     return {"text": row.get("text") or "", "image_base64": image_b64, "image_mime": image_mime}
 
 
-def endpoint_predict(url: str, payload: dict, timeout: float) -> dict:
+def endpoint_predict(url: str, payload: dict, timeout: float, token: str | None = None) -> dict:
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"}, method="POST")
+                                 headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
+        result = json.load(r)
+        if not isinstance(result, dict) or result.get("risk_level") not in {"high", "medium", "uncertain", "low"}:
+            raise ValueError("API chưa trả risk_level hợp lệ")
+        return result
 
 
 def pct(values: list[float], p: float) -> float:
@@ -143,8 +150,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-p95-text", type=float, default=6.0, help="p95 tối đa (giây) cho mẫu văn bản")
     ap.add_argument("--max-p95-image", type=float, default=12.0, help="p95 tối đa (giây) cho mẫu ảnh")
     ap.add_argument("--compare")
+    ap.add_argument("--token-env", help="Tên biến môi trường giữ token tài khoản test của API")
     ap.add_argument("--max-drop", type=float, default=0.02)
     args = ap.parse_args(argv)
+    token = os.environ.get(args.token_env) if args.token_env else None
+    if args.token_env and not token:
+        ap.error("Biến môi trường token chưa được đặt")
 
     positive = {p.strip() for p in args.positive.split(",") if p.strip()}
     rows = [json.loads(line) for line in pathlib.Path(args.data).read_text(encoding="utf-8").splitlines()
@@ -164,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 payload = build_payload(row)  # đọc + mã hóa ảnh trước, không tính vào độ trễ
                 t0 = time.perf_counter()
                 try:
-                    pred = endpoint_predict(args.endpoint, payload, args.timeout)
+                    pred = endpoint_predict(args.endpoint, payload, args.timeout, token)
                 finally:
                     latency = time.perf_counter() - t0
         except Exception as exc:  # lỗi mạng/timeout/ảnh hỏng tính là lỗi, KHÔNG tính là "an toàn"
@@ -221,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     gates["không có lỗi gọi API"] = not errors
     if args.compare and pathlib.Path(args.compare).exists():
         prev = json.loads(pathlib.Path(args.compare).read_text(encoding="utf-8"))
+        prev = prev.get("summary", prev)
         drop = prev.get("recall_scam", 0) - recall
         summary["recall_delta_vs_prev"] = round(-drop, 3)
         gates[f"recall không giảm quá {args.max_drop} so với {prev.get('tag')}"] = drop <= args.max_drop
@@ -233,8 +245,10 @@ def main(argv: list[str] | None = None) -> int:
     (out / f"{stamp}-{args.tag}.json").write_text(json.dumps({"summary": summary, "results": results,
                                                               "errors": errors}, ensure_ascii=False, indent=2),
                                                   encoding="utf-8")
+    summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
+    (out / "last_run.json").write_text(summary_json, encoding="utf-8")
     if summary["passed"] and not args.baseline:
-        (out / "latest.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        (out / "latest.json").write_text(summary_json, encoding="utf-8")
 
     md = [f"# Eval `{args.tag}` — {summary['time']}", "",
           f"- Mẫu: {summary['n']} ({summary['n_scam']} lừa đảo, {summary['n_legit']} hợp lệ)"

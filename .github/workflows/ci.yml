@@ -3,9 +3,59 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_runner
+          POSTGRES_PASSWORD: ci-postgres-only
+          POSTGRES_DB: tkc_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 4s
+          --health-retries 12
+    env:
+      MVP_TEST_POSTGRES_URL: postgresql://test_runner:ci-postgres-only@127.0.0.1:5432/tkc_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python3 tests/test_kit_scripts.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            apps/api/tools/media/package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --prefix apps/api/tools/media
+      - run: python -m pip install -r apps/api/requirements-dev.txt
+      - run: sudo apt-get install -y fonts-dejavu-core postgresql-client
+      - run: psql "$MVP_TEST_POSTGRES_URL" -v ON_ERROR_STOP=1 -f infra/supabase/migrations/001_mvp.sql
+      - run: python -m pytest -q
+      - run: npm ci --prefix apps/web
+      - run: npm run build --prefix apps/web
+      - run: python -m pip install playwright==1.63.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Browser integration
+        env:
+          MVP_WEB_URL: http://localhost:3000
+          MVP_BROWSER_USER_EMAIL: user@example.test
+          MVP_BROWSER_USER_PASSWORD: local-ci-user
+          MVP_BROWSER_OPS_EMAIL: ops@example.test
+          MVP_BROWSER_OPS_PASSWORD: local-ci-ops
+          APP_SECRET: isolated-ci-secret-value-not-for-deployment
+          API_INTERNAL_URL: http://127.0.0.1:8000
+        run: |
+          export DEMO_USER_EMAIL="$MVP_BROWSER_USER_EMAIL" DEMO_USER_PASSWORD="$MVP_BROWSER_USER_PASSWORD"
+          export DEMO_OPS_EMAIL="$MVP_BROWSER_OPS_EMAIL" DEMO_OPS_PASSWORD="$MVP_BROWSER_OPS_PASSWORD"
+          python -m uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8000 --no-access-log &
+          api_pid=$!
+          npm run start --prefix apps/web &
+          web_pid=$!
+          trap 'kill "$api_pid" "$web_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --retry 15 --retry-connrefused --retry-delay 1 http://localhost:8000/health
+          curl --fail --silent --retry 15 --retry-connrefused --retry-delay 1 http://localhost:3000/ -o /dev/null
+          python -m pytest -q tests/e2e

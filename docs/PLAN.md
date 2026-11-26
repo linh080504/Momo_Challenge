@@ -74,14 +74,12 @@ Nhịp mỗi ngày: 9:00 standup 15 phút (`/daily-standup N`) · làm việc ·
 - QA: thử với 5 người dùng thật, ghi `docs/USER_TESTS.md`.
 
 ## Ngày 9 — Should #2: Người thân
-- BE: bot Telegram, liên kết người giám hộ bằng deep link, `POST /v1/guardian/notify`.
-- FE: nút "Hỏi người thân", màn liên kết.
-- AI: bản tóm tắt 2 câu cho người thân.
+- BE: phát hành link chia sẻ tóm tắt đã che STK/SĐT và hết hạn sau 24 giờ.
+- FE: nút "Hỏi người thân", trang mở link và chia sẻ qua chức năng hệ điều hành.
+- AI: mẫu tóm tắt 2 câu cho từng mức rủi ro.
 - QA: thêm 5 người dùng thật (tổng ≥ 10); xin phép quay phản ứng.
 - PM: **[brief] phỏng vấn 1 người từng làm vận hành/CSKH** để xác nhận quy trình thủ công mô phỏng giống thực tế → biên bản trong `docs/USER_TESTS.md`.
 - PM + pitch-writer: quay nháp video.
-
-> Lưu ý Should #2 đã rút gọn (DECISIONS 2026-11-24): **không làm bot Telegram**. Thay bằng link chia sẻ chứa tóm tắt 2 câu, đã che STK/SĐT, hết hạn 24 giờ, người dùng tự gửi qua nút chia sẻ của hệ điều hành.
 
 ## Ngày 10 — G2 Feature freeze · demo 4
 - AI: vòng tối ưu cuối, eval ĐẠT cổng.
@@ -109,6 +107,27 @@ Nhịp mỗi ngày: 9:00 standup 15 phút (`/daily-standup N`) · làm việc ·
 ## Ngày 14 — Dự phòng + chuẩn bị chung kết
 - `pitch-writer` soạn 15 câu hỏi khó và câu trả lời ≤ 40 giây (`submission/QA.md`); luyện thuyết trình 2 lần có bấm giờ.
 - Hệ thống: chỉ hotfix có PM duyệt.
+
+---
+
+## Kế hoạch bổ sung từ kiến trúc hệ thống
+
+Các mốc dưới đây bám theo kế hoạch 14 ngày và phạm vi đã chốt trong [Product Brief](PRODUCT_BRIEF.md#4-phạm-vi).
+
+| Mốc | Chủ trì | Việc triển khai | Xong khi |
+|---|---|---|---|
+| Ngày 2 · Đầu vào và trích xuất | FE · BE · AI | Nhận tin nhắn dán từ SMS, Zalo, mạng xã hội, ảnh chụp và URL theo hợp đồng `/v1/analyze`. Chuẩn hóa đầu vào, đọc chữ trong ảnh, trích số tài khoản, số điện thoại và tên miền. Che dữ liệu cá nhân trước khi gửi sang dịch vụ ngoài và dùng văn bản nguồn để đối chiếu trích dẫn trong lúc xử lý. | Ảnh chụp và văn bản đi qua cùng luồng phân tích sau bước đọc ảnh. Ảnh lỗi trả thông báo rõ ràng. |
+| Ngày 3 · Nguồn dữ liệu và điểm rủi ro | AI · BE | Tra mẫu lừa đảo đã biết, tên miền thương hiệu chính thức, Google Safe Browsing và danh sách thực thể đã duyệt. Kết hợp luật với LLM để chấm điểm 0–100 từ các tín hiệu như giả mạo thương hiệu, link nguy hiểm, yêu cầu chuyển tiền, thông tin bất thường và mẫu lừa đảo đã biết. | Kết quả có mức nguy cơ, dấu hiệu kèm trích dẫn, câu hỏi kiểm chứng và hành động gợi ý. |
+| Ngày 4 · Chọn cách đọc ảnh | AI · QA | Đo độ chính xác đọc ảnh tiếng Việt và độ trễ. Nếu các model ứng viên đọc ảnh chưa đạt, thử OCR riêng như PaddleOCR để lấy chữ và tọa độ, ưu tiên ảnh có bố cục phức tạp. Nhận diện ngôn ngữ và dùng VLM để hiểu logo hoặc giao diện giả mạo là các hướng thử thêm khi dữ liệu eval cho thấy cần. | Có báo cáo so sánh trên ảnh thật đã ẩn danh, nêu lỗi trích xuất và ảnh hưởng tới recall, tỷ lệ báo nhầm, p95. |
+| Ngày 5–7 · Bàn làm việc vận hành và cảnh báo web | AI · BE · FE · QA | `/ops` tiếp nhận báo cáo, hiển thị bằng chứng và gom chiến dịch theo thực thể hoặc mẫu tương tự. Trang chi tiết hiển thị mức nguy cơ, số báo cáo liên quan và các biến thể link. Chuyên viên duyệt hoặc bác bỏ, hệ thống ghi người duyệt và thời điểm. Kết quả phân tích hiển thị ngay sau khi xử lý. Cảnh báo đã xác nhận xuất hiện trên web ở lần kiểm tra liên quan sau khi duyệt. | Test e2e đi từ gửi báo cáo đến gom chiến dịch, duyệt và thấy cảnh báo khi kiểm tra lại. Người dùng tự quyết định dừng và xác minh trước khi chuyển tiền. |
+| Ngày 8 · VietQR (Should #1) | BE · AI · FE | Giải mã ảnh QR để lấy ngân hàng, số tài khoản, số tiền và nội dung. Kiểm tra CRC và đối chiếu người nhận với tin nhắn. | Hiển thị thông tin giải mã và đưa kết quả đối chiếu vào phân tích. Chỉ tạo QR sạch khi rủi ro thấp và người dùng xác nhận người nhận. |
+
+### Hạng mục mở rộng
+
+- **Model ứng viên.** Sơ đồ gợi ý Qwen3-VL và LLaVA cho phân tích hình ảnh, Qwen3 và Llama cho suy luận văn bản. Việc chọn model dựa trên số đo eval ngày 4.
+- **Ghi âm (Could).** Thử ASR như Whisper để chép lời cuộc gọi rồi đưa bản chép lời qua luồng ẩn danh và phân tích văn bản.
+- **Bảng tổng quan `/ops` (Could).** Bổ sung số báo cáo trong 24 giờ, xu hướng và phân bố chiến dịch theo mức nguy cơ dựa trên dữ liệu đo được.
+- **Cảnh báo đa kênh (lộ trình).** Mở rộng cảnh báo đã duyệt từ web sang email, SMS và thông báo nội bộ cho chuyên viên hoặc CSKH.
 
 ---
 
