@@ -12,3 +12,4 @@ dist/
 *.pyc
 .DS_Store
 .claude/settings.local.json
+.playwright-mcp/
