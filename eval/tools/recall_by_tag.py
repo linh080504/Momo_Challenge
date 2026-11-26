@@ -65,6 +65,10 @@ def main() -> int:
     seg("ảnh official_mock", lambda r: r["provenance"] == "official_mock")
     seg("hard_positive", lambda r: "hard_positive" in r["tags"])
     seg("hard_negative", lambda r: "hard_negative" in r["tags"])
+    seg("injection (tổng hợp)", lambda r: "injection" in r["tags"])
+    seg("template_like (nghi sinh theo khuôn)", lambda r: "template_like" in r["tags"])
+    seg("public_dataset KHÔNG template_like", lambda r: r["provenance"] == "public_dataset"
+        and "template_like" not in r["tags"])
     for prov in sorted({r["provenance"] for r in rows if r["provenance"]}):
         seg(f"provenance={prov}", lambda r, p=prov: r["provenance"] == p)
     for sid in sorted({r["scenario_id"] for r in rows if r["scenario_id"] and r["label"] == "scam"}):
