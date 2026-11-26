@@ -8,4 +8,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python3 tests/test_kit_scripts.py
+          cache: pip
+          cache-dependency-path: apps/api/requirements-dev.txt
+      - name: Cai thu vien API (gom ca thu vien test)
+        run: python3 -m pip install -r apps/api/requirements-dev.txt
+      - name: Test bo kit
+        run: python3 tests/test_kit_scripts.py
+      # Khong can secret: test tu cap khoa gia cho ENTITY_HASH_KEY, dung SQLite tam, analyzer duoc monkeypatch.
+      - name: Test API
+        run: python3 -m pytest apps/api
