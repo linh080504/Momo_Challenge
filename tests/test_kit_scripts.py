@@ -51,6 +51,24 @@ def test_pii_same_value_same_token():
     assert r["masked"].count("[PHONE_1]") == 2
 
 
+def test_pii_account_before_word_starting_with_d_is_masked():
+    # Hồi quy (2026-11-26): "đ" của "để/đến/đã/đi" từng bị coi là hậu tố số tiền -> STK không được mask
+    for tail in ("để xác minh", "đến hết ngày", "đã khóa", "đi nhé", "đồng ý nhé"):
+        masked = pii_mask.mask_text(f"STK 1903456789012 {tail}")["masked"]
+        assert "1903456789012" not in masked and "[ACCOUNT_1]" in masked, tail
+    for amount in ("5000000đ", "5000000 đ", "5000000đ,", "2000000 đồng", "1500000 vnđ"):
+        assert amount in pii_mask.mask_text(f"chuyển {amount} ngay")["masked"], amount
+
+
+def test_domain_gov_vn_is_official():
+    # Hồi quy (2026-11-26): vneid.gov.vn, congan.hanoi.gov.vn từng bị chấm high (brand_in_unofficial)
+    for url in ("https://vneid.gov.vn", "congan.hanoi.gov.vn", "https://dichvucong.gov.vn/p/home"):
+        r = domain_check.check(url)
+        assert r["level"] == "low" and r["signals"][0]["signal"] == "official", url
+    assert domain_check.check("https://vneid-gov.vn.xyz")["level"] == "high"
+    assert domain_check.check("http://dichvucong.gov.vn.verify-id.top")["level"] == "high"
+
+
 def test_domain_official_vs_fake():
     assert domain_check.check("https://ebank.vietcombank.com.vn")["level"] == "low"
     assert domain_check.check("https://vietcombank-xacminh.top/login")["level"] == "high"

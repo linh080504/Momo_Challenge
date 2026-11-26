@@ -23,7 +23,10 @@ CARD = re.compile(r"(?<!\d)(?:\d{4}[ -]?){3}\d{4}(?:[ -]?\d{1,3})?(?!\d)")
 LONG_NUM = re.compile(r"(?<!\d)(?<!\d[.,])\d{6,19}(?!\d|[.,]\d)")
 OTP_CTX = re.compile(r"(OTP|mã xác (?:thực|nhận)|ma xac (?:thuc|nhan))\D{0,15}(\d{4,8})", re.IGNORECASE)
 ID_CTX = re.compile(r"(CCCD|CMND|căn cước|can cuoc|định danh)\D{0,15}(\d{9,12})", re.IGNORECASE)
-AMOUNT_SUFFIX = re.compile(r"^\s*(đ|d\b|vnd|vnđ|đồng|dong|k\b|tr\b|triệu|trieu|nghìn|ngàn)", re.IGNORECASE)
+# Hậu tố tiền phải là cả một từ: "đ" không được khớp đầu "để/đến/đã", "đồng" không được khớp "đồng ý".
+# Trước 2026-11-26: "STK 1903456789012 để xác minh" bị coi là số tiền -> STK lọt lên LLM chưa mask.
+AMOUNT_SUFFIX = re.compile(r"^\s*(đ\b|d\b|vnd\b|vnđ\b|đồng\b(?!\s+ý)|dong\b(?!\s+y\b)|k\b|tr\b|triệu|trieu|nghìn|ngàn)",
+                           re.IGNORECASE)
 
 
 def _luhn_ok(digits: str) -> bool:
