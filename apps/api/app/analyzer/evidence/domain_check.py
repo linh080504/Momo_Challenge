@@ -1,7 +1,6 @@
-"""Domain heuristics — port of .claude/skills/evidence-tools/scripts/domain_check.py.
+"""Domain heuristics — port of .claude/skills/evidence-tools/scripts/domain_check.py (logic identical).
 
-ONE deliberate deviation from the kit: any host under .gov.vn counts as official (VNNIC only issues
-.gov.vn to state bodies). The kit flags e.g. vneid.gov.vn / congan.hanoi.gov.vn as brand_in_unofficial (high).
+*.gov.vn counts as official (VNNIC only issues .gov.vn to state bodies; DECISIONS 2026-11-26).
 
 Keep in sync with the kit script; test_evidence.py checks parity on sample URLs.
 RDAP (network) is off by default; .vn domains usually have no RDAP -> None, never "safe".

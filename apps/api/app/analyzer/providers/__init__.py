@@ -55,6 +55,9 @@ class LLMResponse:
 class LLMProvider(ABC):
     name: ClassVar[str] = "base"
     supports_vision: ClassVar[bool] = False
+    # Raw images (unmaskable PII) go ONLY to providers that do not store/train on inputs.
+    # PM 2026-11-26: accepted exception for OCR, enabled for Bedrock only. Set True only after review.
+    no_data_retention: ClassVar[bool] = False
 
     def __init__(self, model: str, **options) -> None:
         self.model = model

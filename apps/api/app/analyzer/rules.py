@@ -1,8 +1,7 @@
 """Text rules for the hybrid score (rule part) — RULES_VERSION "rules_v1".
 
-Points follow .claude/skills/scam-analyzer/risk-scoring.md where a row exists. Rows marked NEW are
-not in risk-scoring.md yet: proposed to PM, to be confirmed or re-weighted from eval results
-(risk-scoring.md: "Điều chỉnh trọng số chỉ dựa trên kết quả eval").
+Points follow .claude/skills/scam-analyzer/risk-scoring.md. Rows marked PM 2026-11-26 were approved by PM
+on 2026-11-26 and still need a row in risk-scoring.md. Future re-weighting only from eval results.
 
 | Signal id            | Points | Source                                                        |
 |----------------------|--------|---------------------------------------------------------------|
@@ -10,10 +9,10 @@ not in risk-scoring.md yet: proposed to PM, to be confirmed or re-weighted from 
 | app_install          | +45    | risk-scoring: Yêu cầu cài app ngoài kho (link .apk)           |
 | gov_personal_account | +40    | risk-scoring: Tự xưng cơ quan + chuyển tiền vào TK cá nhân    |
 | urgency/fear/secrecy | +10 ea | risk-scoring: từ khóa gấp/dọa/giữ bí mật (mỗi loại)            |
-| prompt_injection     | +35    | NEW — quy tắc vàng: câu ra lệnh cho AI là dấu hiệu lừa đảo     |
-| scenario:<id>        | +35    | NEW — mẫu đặc trưng của 1 trong 25 mã taxonomy (tính 1 lần)    |
-| money_request        | +10    | NEW — đòi chuyển/nộp/nạp tiền                                  |
-| personal_account     | +10    | NEW — nhận tiền qua TK cá nhân/người khác (không kèm cơ quan)  |
+| prompt_injection     | +35    | PM 2026-11-26 — quy tắc vàng: câu ra lệnh cho AI là dấu hiệu lừa đảo     |
+| scenario:<id>        | +35    | PM 2026-11-26 — mẫu đặc trưng của 1 trong 25 mã taxonomy (tính 1 lần)    |
+| money_request        | +10    | PM 2026-11-26 — đòi chuyển/nộp/nạp tiền                                  |
+| personal_account     | +10    | PM 2026-11-26 — nhận tiền qua TK cá nhân/người khác (không kèm cơ quan)  |
 (domain_check, danh sách đen, danh sách trắng: xem evidence/ và scoring.py.)
 
 Pure functions, no I/O, no logging of input text.

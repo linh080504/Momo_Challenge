@@ -36,6 +36,7 @@ _DEFAULT_REASON = {
 class Provider(LLMProvider):
     name = "mock"
     supports_vision = True
+    no_data_retention = True  # offline: nothing leaves the process
 
     def __init__(self, model: str = "", responses: list | None = None,
                  handler: Callable[[LLMRequest], str] | None = None, delay_s: float = 0.0, **options) -> None:

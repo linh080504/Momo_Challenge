@@ -77,7 +77,8 @@ class _Clock:
 # ---- step 1: read image ----------------------------------------------------------------------
 
 async def _ocr(image: bytes, mime: str, providers: list[LLMProvider], clock: _Clock) -> str | None:
-    vision = [p for p in providers if p.supports_vision]
+    # Raw image = unmaskable PII: only no-retention providers (PM 2026-11-26, Bedrock).
+    vision = [p for p in providers if p.supports_vision and p.no_data_retention]
     if not vision:
         return None
     p = prompts.load(prompts.OCR_PROMPT)

@@ -113,7 +113,7 @@ def _blacklist_item(u: UrlInfo, hit: str | None) -> list[EvidenceItem]:
     if not hit:
         return []
     info = blacklist.snapshot_info()
-    return [EvidenceItem("domain_check", "community_blacklist",
+    return [EvidenceItem("external_blacklist", "community_blacklist",
                          f"{u.host}: có trong danh sách trang lừa đảo, độc hại của cộng đồng ({blacklist.SOURCE_NAME}, "
                          f"cập nhật {str(info.get('upstream_updated', '?'))[:10]}).",
                          u.host, "high", {"listed": hit})]

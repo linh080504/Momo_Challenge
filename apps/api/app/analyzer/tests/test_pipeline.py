@@ -43,14 +43,14 @@ def test_pii_port_matches_kit():
     spec = importlib.util.spec_from_file_location("kit_pii", kit_path)
     kit = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(kit)
-    for t in ["Chuyển 5.000.000đ vào STK 0123456789, gọi 0912 345 678, mã OTP 123456",
+    for t in [SCAM, f"STK {ACCOUNT} đồng ý nhé", "Chuyển 5.000.000đ vào STK 0123456789, gọi 0912 345 678, mã OTP 123456",
               "thẻ 4111 1111 1111 1111, email a.b@c.vn, CCCD 012345678901", "nạp 2000000đ, rút 1500000 vnđ"]:
         assert pii.mask_text(t) == kit.mask_text(t)
 
 
-@pytest.mark.parametrize("tail", ["để xác minh", "đến hết ngày", "đã khóa", "đi nhé"])
+@pytest.mark.parametrize("tail", ["để xác minh", "đến hết ngày", "đã khóa", "đi nhé", "đồng ý nhé"])
 def test_account_before_word_starting_with_d_is_masked(tail):
-    """Regression: the kit leaves these unmasked (treats 'đ...' as an amount suffix)."""
+    """Regression (2026-11-26): 'đ...' / 'đồng ý' used to be taken as an amount suffix."""
     masked = pii.mask_text(f"STK {ACCOUNT} {tail}")["masked"]
     assert ACCOUNT not in masked and "[ACCOUNT_1]" in masked
     assert "5000000đ" in pii.mask_text("chuyển 5000000đ ngay")["masked"]
@@ -198,6 +198,16 @@ def test_ocr_text_is_masked_before_reasoning_and_used_for_quotes():
     assert mock.calls[0].purpose == "ocr" and mock.calls[0].images
     assert PHONE not in mock.calls[1].user
     assert "đọc giúp em mã OTP" in [f["quote"] for f in out["red_flags"]]
+
+
+def test_raw_image_never_sent_to_retaining_provider():
+    class Retaining(MockProvider):
+        no_data_retention = False
+
+    p = Retaining(handler=lambda req: "Ngân hàng báo khóa tài khoản")
+    out = run("", image=b"\x89PNG\r\n\x1a\n" + b"0" * 32, mime="image/png", providers=[p])
+    assert all(not c.images for c in p.calls)
+    assert out["risk_level"] == "uncertain" and "Chưa đọc được chữ trong ảnh" in out["summary"]
 
 
 def test_logs_never_contain_raw_pii(caplog):

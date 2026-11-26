@@ -1,6 +1,4 @@
-"""PII masking — port of .claude/skills/pii-guard/scripts/pii_mask.py (+ display helper).
-
-ONE fix vs the kit: AMOUNT_SUFFIX "đ" requires a word boundary (see the comment at AMOUNT_SUFFIX).
+"""PII masking — port of .claude/skills/pii-guard/scripts/pii_mask.py (logic identical, + display helper).
 
 Runs BEFORE any LLM call. `mapping` (token -> real value) stays in server memory: never log it,
 never send it out. pii-guard suggests app/privacy/mask.py (backend-owned); this copy lives in the
@@ -17,9 +15,10 @@ CARD = re.compile(r"(?<!\d)(?:\d{4}[ -]?){3}\d{4}(?:[ -]?\d{1,3})?(?!\d)")
 LONG_NUM = re.compile(r"(?<!\d)(?<!\d[.,])\d{6,19}(?!\d|[.,]\d)")
 OTP_CTX = re.compile(r"(OTP|mã xác (?:thực|nhận)|ma xac (?:thuc|nhan))\D{0,15}(\d{4,8})", re.IGNORECASE)
 ID_CTX = re.compile(r"(CCCD|CMND|căn cước|can cuoc|định danh)\D{0,15}(\d{9,12})", re.IGNORECASE)
-# FIX vs kit: "đ" needs a word boundary, otherwise "STK 1903456789012 để ..." / "... đến" / "... đã" is
-# taken as an amount and the account number is NOT masked (PII leak to the LLM).
-AMOUNT_SUFFIX = re.compile(r"^\s*(đ\b|d\b|vnd|vnđ|đồng|dong\b|k\b|tr\b|triệu|trieu|nghìn|ngàn)", re.IGNORECASE)
+# Amount suffix must be a whole word: "đ" must not match "để/đến/đã", "đồng" must not match "đồng ý".
+# Before 2026-11-26 "STK 1903456789012 để xác minh" was taken as an amount -> account sent unmasked to the LLM.
+AMOUNT_SUFFIX = re.compile(r"^\s*(đ\b|d\b|vnd\b|vnđ\b|đồng\b(?!\s+ý)|dong\b(?!\s+y\b)|k\b|tr\b|triệu|trieu|nghìn|ngàn)",
+                           re.IGNORECASE)
 
 
 def _luhn_ok(digits: str) -> bool:

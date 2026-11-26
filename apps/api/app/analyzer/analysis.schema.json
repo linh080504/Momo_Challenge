@@ -39,7 +39,7 @@
       "items": {
         "type": "object", "required": ["source", "finding"],
         "properties": {
-          "source": {"type": "string", "enum": ["internal_blacklist", "safe_browsing", "domain_check", "rdap", "vietqr", "rules", "llm"]},
+          "source": {"type": "string", "enum": ["internal_blacklist", "external_blacklist", "safe_browsing", "domain_check", "rdap", "vietqr", "rules", "llm"]},
           "finding": {"type": "string"},
           "weight": {"type": "integer"}
         }

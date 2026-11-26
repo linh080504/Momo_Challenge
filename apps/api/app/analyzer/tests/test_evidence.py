@@ -19,8 +19,9 @@ def _kit():
 @pytest.mark.skipif(not KIT.exists(), reason="kit script not present")
 @pytest.mark.parametrize("url", ["https://vietcombank-xacminh.top/login", "bit.ly/abc", "http://192.168.1.1/x",
                                  "https://vietconbank.com", "shopee.vn/sale", "xn--vietcmbank-abc.com",
-                                 "https://congan-hanoi.online"])
-def test_port_matches_kit_outside_gov_vn(url):
+                                 "https://congan-hanoi.online", "https://vneid.gov.vn", "congan.hanoi.gov.vn",
+                                 "http://dichvucong.gov.vn.verify-id.top"])
+def test_port_matches_kit(url):
     assert domain_check.check(url) == _kit().check(url)
 
 
@@ -53,9 +54,10 @@ def test_gather_evidence_parallel_and_findings():
     items = asyncio.run(gather_evidence(urls))
     sigs = {(i.host, i.signal) for i in items}
     assert (listed, "community_blacklist") in sigs
+    assert next(i for i in items if i.signal == "community_blacklist").source == "external_blacklist"
     assert ("vietcombank-xacminh.top", "domain_high") in sigs
     assert ("momo.vn", "official_domain") in sigs
-    assert all(i.source in {"domain_check", "internal_blacklist", "safe_browsing", "rdap"} for i in items)
+    assert all(i.source in {"domain_check", "external_blacklist"} for i in items)
 
 
 def test_tool_failure_is_skipped_not_safe(monkeypatch):

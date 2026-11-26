@@ -5,7 +5,7 @@ Evidence weights:
 |--------------------------------|--------|--------------------------------------------------------------|
 | domain_check high / medium     | +45/+20| risk-scoring.md (worst URL counts once; shortener = medium)  |
 | official domain (whitelist)    | -30    | risk-scoring.md (once; only if no risky URL / blocklist hit)   |
-| community blocklist hit        | +45    | NEW — third-party, not ops-approved, frozen 2025-04-11, so      |
+| community blocklist hit        | +45    | PM 2026-11-26 — third-party, not ops-approved, frozen 2025-04-11, so      |
 |                                |        | below "danh sách đen ĐÃ DUYỆT" (+60). Alone -> medium.          |
 """
 from __future__ import annotations
