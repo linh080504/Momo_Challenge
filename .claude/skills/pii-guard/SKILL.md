@@ -22,7 +22,8 @@ python3 .claude/skills/pii-guard/scripts/pii_mask.py --json "Chuyển 5.000.000�
 |---|---|---|---|
 | Văn bản/ảnh người dùng gửi | Chỉ khi người dùng đồng ý "đóng góp để bảo vệ người khác" | 30 ngày | Mặc định xử lý xong là xóa |
 | Ghi âm | Không lưu | Xóa ngay sau khi bóc băng | |
-| Hash thực thể (STK, SĐT, URL) | Có | Theo vòng đời báo cáo | Không lưu giá trị gốc trong bảng tra cứu |
+| SĐT, STK, thẻ, email | Chỉ hash + dạng đã che (vd `0912****78`) | Theo vòng đời báo cáo | Hash = HMAC-SHA256 (64 ký tự hex) với khóa `ENTITY_HASH_KEY`, không dùng hash trần. **Không lưu giá trị gốc** trong bảng tra cứu. Đổi khóa = mọi hash cũ mất tác dụng |
+| Tên miền (URL) | Có: **host đầy đủ** + hash | Theo vòng đời báo cáo | Chỉ giữ phần host; bỏ đường dẫn và tham số vì có thể chứa mã phiên hoặc định danh cá nhân (DECISIONS 2026-11-26) |
 | Log hệ thống | Có, đã mask | 14 ngày | Không log mapping, không log ảnh |
 
 - Màn hình đầu tiên: một câu giải thích dữ liệu dùng để làm gì + nút đồng ý; nút "Xóa dữ liệu của tôi" trong cài đặt.

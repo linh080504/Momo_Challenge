@@ -2,7 +2,7 @@ import re
 import subprocess
 
 from ..analyzer.contract import DISCLAIMER, AnalyzerError
-from ..analyzer.pipeline.rules import match_rules
+from ..analyzer.signals.rules import match_rules
 from ..analyzer.providers.ocr import image_for
 from ..evidence.url_gateway import checked_destination, inspect_url
 from ..kit import vietqr

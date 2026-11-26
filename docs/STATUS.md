@@ -140,3 +140,11 @@ Với 29 mẫu tổng hợp đủ sáu đầu vào, API xử lý đủ lượt v
 Trên một câu tổng hợp tiếng Việt dài 3,5 giây, `base-q5_1` có WER 80% và `large-v3-turbo-q5_0` có WER 50%. Hai phép đo dùng 10 từ tham chiếu và xác nhận sự khác biệt trong một ca thử. Cần đo lại với ghi âm thật trước khi chọn model ASR. [Whisper cho staging](../infra/deploy/README.md#bật-nhận-dạng-ghi-âm-ở-staging)
 
 [Kế hoạch xây dựng từng bước](PLAN.md#kế-hoạch-xây-dựng-từng-bước) · [Hợp đồng sáu đầu vào](PRODUCT_BRIEF.md#hợp-đồng-sáu-đầu-vào-và-hai-luồng-sản-phẩm)
+
+### Tích hợp main vào nhánh PayPause
+
+Đã lấy `main` tại `e8738b6`. PayPause dùng `app.main:app` và trang `/`. API ngày 2 chạy riêng bằng `app.day_two:create_app`, giao diện của đội truy cập được qua `/prototype`. Cả hai bộ kiểm thử API và analyzer tiếp tục chạy trong CI. Đã nhập danh sách miền cộng đồng vào nguồn tín hiệu `external_blacklist` của PayPause. [Cách chạy local](RUN_LOCAL.md)
+
+`main` bổ sung 32 mẫu văn bản/ảnh cho đánh giá nội bộ và công cụ rà nhãn. Dùng theo phạm vi nguồn và ghi nhận giới hạn giấy phép trong hồ sơ dữ liệu. Tập URL có nhãn và holdout tách tên miền cho FraudURL vẫn là đầu việc của bước 4 và 6. [Nguồn dữ liệu](DATA_SOURCES.md)
+
+Kiểm thử sau tích hợp đạt 173 ca, gồm PostgreSQL và trình duyệt cho PayPause lẫn `/prototype`. Bộ analyzer của đội đạt riêng 92 ca. Build Docker staging và kiểm tra TypeScript đã đạt.

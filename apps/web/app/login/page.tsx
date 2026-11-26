@@ -16,6 +16,8 @@ export default function AccountPage() {
 
   useEffect(() => {
     const saved = currentSession();
+    // The browser session can only be read after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!saved) { setLoading(false); return; }
     const controller = new AbortController();
     api<Account>("/v1/auth/me", "GET", undefined, saved.token, controller.signal)

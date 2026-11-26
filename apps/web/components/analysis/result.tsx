@@ -9,6 +9,7 @@ import { ReceiptEvidence } from "./receipt-evidence";
 
 const sources: Record<string, string> = {
   internal_blacklist: "Chiến dịch đã duyệt",
+  external_blacklist: "Danh sách cảnh báo cộng đồng",
   domain_check: "Kiểm tra tên miền",
   safe_browsing: "Google Safe Browsing",
   rules: "Dấu hiệu theo quy tắc",

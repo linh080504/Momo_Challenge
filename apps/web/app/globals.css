@@ -1,0 +1,28 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme inline {
+  --font-sans: var(--font-be-vietnam), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Chỉ giao diện sáng: một bộ màu duy nhất để kiểm tra độ tương phản cho người lớn tuổi. */
+.day-two-preview {
+  color-scheme: light;
+  background: #f8fafc;
+  color: #0f172a;
+  /* Chữ nhỏ nhất của toàn site là 18px. Không dùng text-sm / text-xs ở bất kỳ đâu. */
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.day-two-preview :focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 3px;
+}
+
+/* Người dùng bật "giảm chuyển động" thì tắt vòng quay. Trạng thái vẫn có chữ nên không mất thông tin. */
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

@@ -15,6 +15,8 @@ export function Upload({ file, onChange, disabled = false, mode = "image" }: {
 
   useEffect(() => {
     if (!file || !["image/png", "image/jpeg"].includes(file.type)) {
+      // An invalid or cleared file drops the existing blob preview.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(null);
       return;
     }

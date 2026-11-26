@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "truoc-khi-chuyen/analysis.schema.json",
+  "title": "Kết quả phân tích của Trước Khi Chuyển",
+  "type": "object",
+  "required": ["risk_level", "risk_score", "scenario_group", "summary", "red_flags", "verification_questions", "recommended_action", "evidence", "ai_disclaimer"],
+  "properties": {
+    "risk_level": {"type": "string", "enum": ["high", "medium", "low", "uncertain"]},
+    "risk_score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "scenario_group": {"type": ["string", "null"], "enum": ["G1", "G2", "G3", "G4", "G5", null], "description": "Nhóm thủ đoạn trong taxonomy.md"},
+    "scenario_id": {"type": ["string", "null"], "description": "Kịch bản con, ví dụ G1.2"},
+    "summary": {"type": "string", "maxLength": 280, "description": "1–2 câu tiếng Việt dễ hiểu"},
+    "red_flags": {
+      "type": "array", "maxItems": 5,
+      "items": {
+        "type": "object", "required": ["quote", "reason"],
+        "properties": {
+          "quote": {"type": "string", "description": "Trích nguyên văn ≤ 20 từ từ đầu vào"},
+          "reason": {"type": "string"},
+          "tactic": {"type": "string", "enum": ["urgency", "authority", "secrecy", "greed", "fear", "personal_account", "credential_request", "app_install", "link", "other"]}
+        }
+      }
+    },
+    "verification_questions": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
+    "recommended_action": {"type": "string", "enum": ["stop_and_verify", "ask_guardian", "report", "proceed_with_clean_qr", "no_action"]},
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {"type": "string", "enum": ["ACCOUNT", "PHONE", "URL", "EMAIL", "CARD", "AMOUNT", "BANK", "ORG"]},
+          "token": {"type": "string"},
+          "display": {"type": "string", "description": "Giá trị đã che bớt để hiển thị, ví dụ 0123****89"}
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["source", "finding"],
+        "properties": {
+          "source": {"type": "string", "enum": ["internal_blacklist", "external_blacklist", "safe_browsing", "domain_check", "rdap", "vietqr", "rules", "llm", "document", "fraud_url_ml"]},
+          "finding": {"type": "string"},
+          "weight": {"type": "integer"}
+        }
+      }
+    },
+    "ai_disclaimer": {"type": "string", "const": "Kết quả do AI phân tích và có thể sai. Hãy xác minh qua số tổng đài chính thức trước khi chuyển tiền."},
+    "model": {"type": "string"},
+    "analysis_path": {"enum": ["fast", "deep"]},
+    "specialized_models": {"type": "object", "properties": {"fraud_url": {"type": "string"}}},
+    "guidance": {"type": "array", "maxItems": 3, "items": {
+      "type": "object", "required": ["id", "text"],
+      "properties": {"id": {"type": "string"}, "text": {"type": "string"}}
+    }},
+    "url_checks": {"type": "array", "maxItems": 6, "items": {
+      "type": "object", "required": ["host", "level", "signals", "domain_age_days"],
+      "properties": {
+        "host": {"type": "string"},
+        "level": {"enum": ["low", "medium", "high"]},
+        "signals": {"type": "array", "items": {"type": "string"}},
+        "domain_age_days": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }},
+    "document": {
+      "type": "object",
+      "required": ["ocr_boxes", "recompression_regions", "signals", "transaction_status", "notice"],
+      "properties": {
+        "ocr_boxes": {"type": "array", "maxItems": 250, "items": {"$ref": "#/$defs/box"}},
+        "recompression_regions": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/box"}},
+        "signals": {"type": "array", "items": {"type": "object", "required": ["category", "finding"], "properties": {
+          "category": {"enum": ["physical", "visual", "semantic"]}, "finding": {"type": "string"}
+        }}},
+        "transaction_status": {"const": "unverified"},
+        "notice": {"type": "string"}
+      }
+    },
+    "prompt_version": {"type": "string"},
+    "latency_ms": {"type": "integer"},
+    "degraded": {"type": "boolean", "description": "Dùng chế độ hạn chế khi thiếu một nguồn đối chiếu hoặc mô hình"},
+    "analysis_id": {"type": "string", "description": "Bằng chứng có chữ ký, hiệu lực 30 phút để gửi báo cáo hoặc tạo link chia sẻ"}
+  },
+  "$defs": {"box": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number", "minimum": 0, "maximum": 1}}}
+}

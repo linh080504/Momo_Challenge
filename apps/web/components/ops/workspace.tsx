@@ -29,11 +29,15 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
 
+  // Browser session storage is available only after hydration.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSession(currentSession()); setReady(true); }, []);
 
   useEffect(() => {
     if (session?.role !== "ops") return;
     const controller = new AbortController();
+    // Clear stale results as soon as the selected query changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError("");
     setCampaigns(null);
     setDetail(null);

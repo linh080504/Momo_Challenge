@@ -20,3 +20,4 @@ apps/web/next-env.d.ts
 eval/raw-notes/
 eval/reports/last_run.json
 eval/generated/
+.playwright-mcp/

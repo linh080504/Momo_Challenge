@@ -125,7 +125,7 @@ Số bước tương ứng với [Kế hoạch xây dựng từng bước](PLAN.
 | 4. Dữ liệu và nội dung | QA + PM | U-01 | `eval/`, `prompts/`, `docs/PRODUCT_BRIEF.md`, `docs/USER_TESTS.md` |
 | 5. Sáu đầu vào và giao diện | FE + BE | U-06, U-07, U-10 | `apps/web/app/`, `apps/web/components/analysis/`, `apps/web/lib/`, `apps/api/app/analyzer/providers/`, `tests/e2e/` |
 | 6. Mô hình chuyên biệt | AI + QA | U-04, U-05, U-06, U-07 | `eval/train_fraud_url.py`, `apps/api/app/analyzer/providers/`, `eval/` |
-| 7. Pháp y ảnh và chất lượng nghe nhìn | AI + QA | U-06, U-07, U-10 | `apps/api/app/analyzer/pipeline/`, `apps/api/app/analyzer/providers/`, `apps/web/components/analysis/`, `eval/` |
+| 7. Pháp y ảnh và chất lượng nghe nhìn | AI + QA | U-06, U-07, U-10 | `apps/api/app/analyzer/signals/`, `apps/api/app/analyzer/providers/`, `apps/web/components/analysis/`, `eval/` |
 | 8. Suy luận sâu và RAG | AI | U-08 | `apps/api/app/analyzer/`, `prompts/` |
 | 9. Đồ thị và điểm rủi ro | BE + AI | U-09 | `apps/api/app/db/`, `apps/api/app/reports/`, `apps/api/app/ops/`, `apps/api/app/analyzer/`, `eval/` |
 | 10. Tác nhân và duyệt | FE + BE | U-10 | `apps/web/components/ops/`, `apps/api/app/ops/`, `apps/api/app/api/`, `tests/e2e/` |

@@ -5,9 +5,10 @@ from ...evidence.url_gateway import checked_destination
 from ...privacy.entities import extract
 from ...qr.checks import evaluate_payment
 from ..contract import DISCLAIMER, LABELS, VALIDATOR
-from ..pipeline.document import inspect_document
-from ..pipeline.knowledge import retrieve_guidance
-from ..pipeline.rules import BENIGN, match_rules
+from ..evidence.blacklist import lookup as community_domain_match
+from ..signals.document import inspect_document
+from ..signals.knowledge import retrieve_guidance
+from ..signals.rules import BENIGN, match_rules
 from ..providers.fraud_url import FraudURL
 from ..providers.llm import PROMPT_VERSION, RISK, infer
 from ..providers.ocr import read_document, read_image
@@ -77,6 +78,8 @@ class Analyzer:
                             for value in domains.values()), default=0)
         if worst_domain:
             add("domain_check", "Tên miền có tín hiệu bất thường. Hãy mở kênh chính thức để xác minh.", worst_domain)
+        if any(item["lookup_allowed"] and community_domain_match(host) for host, item in domains.items()):
+            add("external_blacklist", "Tên miền xuất hiện trong danh sách cảnh báo cộng đồng vn-badsite-filter.", 45)
         url_score = self.fraud_url.score(domains) if self.fraud_url else None
         if url_score is not None and url_score >= .85 and worst_domain:
             add("fraud_url_ml", "Mô hình URL ghi nhận thêm tín hiệu tương đồng với mẫu phishing đã gán nhãn.", 15)

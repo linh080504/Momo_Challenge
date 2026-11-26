@@ -88,6 +88,20 @@ def test_desktop_receipt_and_qr_link():
         browser.close()
 
 
+def test_team_prototype_can_use_the_integrated_api():
+    playwright = pytest.importorskip("playwright.sync_api")
+    with playwright.sync_playwright() as runner:
+        browser = runner.chromium.launch()
+        page = browser.new_page()
+        page.goto(WEB + "/prototype", wait_until="networkidle")
+        page.get_by_role("textbox").fill("Tài khoản tạm giữ. Chuyển ngay qua STK 0000007421, không được nói với ai.")
+        with page.expect_response(lambda response: response.url.endswith("/v1/analyze/stream")) as result:
+            page.get_by_role("button", name="Kiểm tra", exact=True).click()
+        assert result.value.status == 200
+        playwright.expect(page.get_by_role("heading", name="NGUY CƠ CAO", exact=True)).to_be_visible(timeout=20000)
+        browser.close()
+
+
 @pytest.mark.skipif(not os.getenv("MVP_BROWSER_AUDIO_FIXTURE"), reason="Requires configured Whisper and a WAV fixture.")
 def test_mobile_speech_reaches_analysis_result():
     playwright = pytest.importorskip("playwright.sync_api")

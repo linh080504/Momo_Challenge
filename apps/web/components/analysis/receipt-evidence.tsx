@@ -10,6 +10,8 @@ export function ReceiptEvidence({ evidence, file }: { evidence: DocumentEvidence
   useEffect(() => {
     if (!file) return;
     const localUrl = URL.createObjectURL(file);
+    // Keep the original blob URL for the evidence overlay and revoke it on cleanup.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPhoto(localUrl);
     return () => URL.revokeObjectURL(localUrl);
   }, [file]);

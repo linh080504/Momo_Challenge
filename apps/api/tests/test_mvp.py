@@ -353,6 +353,15 @@ def test_threat_intel_uses_registered_and_tenant_domains_only(configured, monkey
     assert "private-path" not in json.dumps(result)
 
 
+def test_community_blocklist_is_separate_from_an_approved_case(client, monkeypatch):
+    from app.analyzer.agents import analyze as agent
+
+    monkeypatch.setattr(agent, "community_domain_match", lambda host: host if host == "example.org" else None)
+    result = analyze(client, "https://example.org/")
+    assert result["risk_level"] == "medium"
+    assert [(item["source"], item["weight"]) for item in result["evidence"]] == [("external_blacklist", 45)]
+
+
 def test_rdap_uses_only_registry_and_domain(configured, monkeypatch):
     configured.rdap_lookups_per_hour = 1
     calls = []
