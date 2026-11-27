@@ -3,6 +3,16 @@
 Cập nhật: 2026-11-26 (đợt 2) · Người giữ: eval-qa · Trạng thái: **32 mẫu chính + 1 mẫu pool**, chưa đạt mục tiêu 100 mẫu.
 Bảng mục 1 dùng được cho mục "Tài nguyên có sẵn" của README.
 
+## Vietnamese Quality-Assured SMS Scam Dataset
+
+Tran Nguyen Thai Tuan, Le Hoang Khang, Nguyen Minh Tai, Nguyen Van Thang và Mai Hoang Dinh công bố bộ SMS tiếng Việt theo CC BY 4.0. Bản đang dùng được ghim tại `a90e2bd7e8df2376939658075ba8094dcee488ad`. Nguồn mô tả tin nhắn đã ẩn danh bằng các token chuẩn. Nhãn `0` là hợp lệ và nhãn `1` gộp spam với lừa đảo. Bộ này có dữ liệu văn bản và nhãn nhị phân. Việc đánh giá thủ đoạn hoặc vùng bằng chứng cần tập được gán nhãn riêng. [Bản phát hành có tệp CSV](https://huggingface.co/datasets/trannguyenthaituan/vietnamese_sms_dataset/tree/a90e2bd7e8df2376939658075ba8094dcee488ad) · [Mô tả và tác giả](https://github.com/trannguyenthaituan251209/vietnamese_sms_dataset)
+
+Giữ ranh giới train/test của nguồn. Công cụ chuẩn hóa Unicode, chữ hoa thường và khoảng trắng để phát hiện trùng. Tập test loại các bản sao có mặt trong train, các bản trùng trong test và bản có nhãn xung đột. Sau rà có 2.061 mẫu train và 536 mẫu test, trong đó test có 424 hợp lệ và 112 spam/lừa đảo. Manifest ghi số mẫu đã loại, checksum nguồn và checksum đầu ra. CSV, JSONL và báo cáo chi tiết ở `eval/generated/vsms/`. [Cách tái lập](../eval/README.md#bộ-sms-tiếng-việt-vsms)
+
+## Nguồn benchmark bổ sung cho FraudURL
+
+PhiUSIIL Phishing URL (Website) của Arvind Prasad và Shalini Chandra, UCI, 2024, giấy phép CC BY 4.0. Dùng nhãn công bố để so sánh LightGBM và XGBoost. Bộ chuẩn bị đọc URL và nhãn offline, chuẩn hóa về hostname, lấy một mẫu trên mỗi tên miền đăng ký và khóa ba tập theo tên miền. Nhãn do nguồn công bố. Tập này đo khả năng phân biệt URL trong nguồn PhiUSIIL và được theo dõi riêng với mẫu Việt Nam của đội. [UCI PhiUSIIL](https://archive.ics.uci.edu/dataset/967/phiusiil+phishing+url+dataset) · [Cách tái lập benchmark](../eval/README.md#benchmark-fraudurl-trên-tập-uci)
+
 ## 1. Nguồn đang dùng
 
 | Nguồn | Loại | Điều kiện dùng | Mẫu trong `dataset.jsonl` | Mẫu trong `pool/` |

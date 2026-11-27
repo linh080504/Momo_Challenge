@@ -63,9 +63,14 @@
 | Nguồn | Dữ liệu đọc | Phạm vi kết nối hoặc đối chiếu |
 |---|---|---|
 | Bộ quy tắc tên miền và QR | Tên miền, cấu trúc URL và nội dung QR | Chạy cục bộ. Public Suffix List dùng snapshot đi kèm thư viện. Tenant dịch vụ dùng chung có phạm vi tra cứu riêng. |
+| Xem trước bài công khai | HTML và ảnh minh họa của URL đã kiểm duyệt trong danh mục | Backend tải địa chỉ cố định theo danh mục, giới hạn dung lượng và tắt chuyển hướng. Chỉ trả tiêu đề, ảnh raster đã mã hóa lại và tín hiệu trích xuất. Qwen nhận các cờ cấu trúc ở dạng boolean. |
 | Safe Browsing | Tên miền đủ điều kiện sau chuẩn hóa | Gửi tên miền gốc hoặc tenant tới endpoint Google cố định. Khóa lấy từ cấu hình máy chủ. Cảnh báo chỉ tính kết quả tương ứng với mục đã hỏi. |
 | RDAP | Tên miền đăng ký thuộc `.com`/`.net` | Dùng endpoint cố định của Verisign với giới hạn lượt. Tuổi tên miền là tín hiệu bổ trợ. |
 | Đối chiếu người nhận | HMAC của thông tin đã trích | Đọc các chiến dịch do chuyên viên duyệt. Báo cáo đang chờ hoặc bị bác không cấp cảnh báo. |
 | Qwen và Chat Completions | Dấu hiệu, loại bằng chứng và mục tri thức do mã ứng dụng tạo | Nhà cung cấp theo cấu hình máy chủ. LLM chỉ trả trường phân loại và không có quyền gọi công cụ hay duyệt hồ sơ. |
 
 Rà soát staging từ xa cần kiểm chứng khóa Safe Browsing, quyền ghi dữ liệu, mã hóa khi lưu, lưu giữ/xóa dữ liệu và cấu hình mạng của môi trường đích. [Public Suffix List trong tldextract](https://github.com/john-kurkowski/tldextract#how-to-disable-http-suffix-list-fetching-for-production)
+
+### Quyết định phạm vi FraudURL
+
+MVP dùng cổng kiểm tra tên miền và các nguồn bằng chứng hiện có cho URL. Việc huấn luyện và kích hoạt FraudURL được đưa ra khỏi điều kiện nghiệm thu MVP. Giữ kết quả LightGBM/XGBoost trên UCI để tham chiếu. Đầu việc U-04 dùng tập URL Việt đã xác minh để kiểm thử chất lượng cổng URL. [Tiến độ và benchmark](STATUS.md#bước-4-và-6-sau-merge)

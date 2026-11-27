@@ -4,7 +4,7 @@ import secrets
 import time
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import delete
@@ -13,14 +13,17 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from ..analyzer.contract import SCHEMA, AnalyzerError
+from ..analyzer.providers.llm import PROMPT_VERSION, QWEN_MODEL
 from ..analyzer.providers.ocr import image_for
+from ..analyzer.signals.knowledge import VERSION as KNOWLEDGE_VERSION
 from ..db.store import Login
 from ..evidence.url_gateway import inspect_url
+from ..ops.alerts import alert_preview
 from ..ops.brief import brief
 from ..ops.investigation import run_workspace
 from ..qr.checks import evaluate, rebuild
 from ..reports.proof import issue_result
-from ..schemas.requests import AnalyzeIn, DecisionIn, LoginIn, ProofIn, QrIn, QrResult, ReportIn, ReviewIn
+from ..schemas.requests import AnalyzeIn, DecisionIn, LoginIn, ProofIn, QrIn, QrResult, ReportIn, ReviewIn, SampleReviewIn, SplitReportIn
 from ..sharing.summaries import summary_for
 
 MAX_BODY_BYTES = 7_100_000
@@ -87,6 +90,11 @@ def make_routes(settings, store, signer, limits, users, analyzer):
     def health():
         return {"status": "ok", "version": settings.app_version}
 
+    @router.get("/ready")
+    def ready():
+        store.ready()
+        return {"status": "ready", "version": settings.app_version}
+
     @router.post("/v1/auth/login")
     def login(data: LoginIn, request: Request):
         limit(request, "login", 10)
@@ -123,6 +131,8 @@ def make_routes(settings, store, signer, limits, users, analyzer):
         else:
             limit(request, "analyze", settings.analysis_per_minute)
         data = await body_as(request, AnalyzeIn)
+        if data.website_html is not None and (not data.website_html.strip() or not data.url):
+            raise HTTPException(422, "Hãy nhập địa chỉ website và đoạn HTML cần kiểm tra.")
         if data.qr_payload is not None:
             data.qr_payload = data.qr_payload.strip()
         for value in (data.url, data.qr_payload if (data.qr_payload or "").lower().startswith(("http://", "https://")) else None):
@@ -176,7 +186,7 @@ def make_routes(settings, store, signer, limits, users, analyzer):
 
     @router.post("/v1/reports", status_code=201)
     def report(data: ReportIn, request: Request, user=Depends(identity)):
-        limit(request, "report", 12, user[0])
+        limit(request, "report", settings.reports_per_minute, user[0])
         claim = proof(data.analysis_id, user)
         campaign_id = store.report(claim, signer.digest("reporter", user[0]))
         if campaign_id is None:
@@ -190,23 +200,67 @@ def make_routes(settings, store, signer, limits, users, analyzer):
     def campaigns(state: Literal["pending", "approved", "rejected"] | None = None, _user=Depends(operator)):
         return [titled(campaign) for campaign in store.campaigns(state)]
 
+    @router.get("/v1/ops/overview")
+    def overview(_user=Depends(operator)):
+        return store.overview()
+
+    @router.get("/v1/ops/system")
+    def system_status(_user=Depends(operator)):
+        return {
+            "app_version": settings.app_version,
+            "prompt_version": PROMPT_VERSION,
+            "knowledge_version": KNOWLEDGE_VERSION,
+            "qwen_model": QWEN_MODEL if settings.dashscope_api_key.get_secret_value().strip() else None,
+            "safe_browsing_configured": bool(settings.safe_browsing_key),
+            "speech_configured": bool(settings.whisper_command and settings.whisper_model_path),
+            "website_capture_enabled": settings.website_capture_enabled,
+            "fraud_url_model": analyzer.fraud_url.version if analyzer.fraud_url else None,
+        }
+
     @router.get("/v1/ops/campaigns/{campaign_id}")
     def campaign(campaign_id: str, _user=Depends(operator)):
         found = store.campaign_investigation(campaign_id)
         if found is None:
             raise HTTPException(404, "Không tìm thấy chiến dịch.")
-        return {**titled(found[0]), "workspace": run_workspace(*found)}
+        return {**titled(found[0]), "workspace": run_workspace(*found, settings, limits),
+                "alerts": alert_preview(found[0])}
+
+    @router.get("/v1/ops/campaigns/{campaign_id}/samples")
+    def campaign_samples(campaign_id: str, after: Annotated[str, Query(max_length=64)] = "",
+                         _user=Depends(operator)):
+        samples = store.campaign_samples(campaign_id, after)
+        if samples is None:
+            raise HTTPException(404, "Không tìm thấy chiến dịch.")
+        return samples
+
+    @router.post("/v1/ops/campaigns/{campaign_id}/samples/{report_id}/review")
+    def label_sample(campaign_id: str, report_id: str, data: SampleReviewIn, user=Depends(operator)):
+        review = store.label_sample(campaign_id, report_id, user[0], data.label, data.revision)
+        if review is None:
+            raise HTTPException(409, "Mẫu đã thay đổi hoặc không còn trong hồ sơ. Hãy tải lại.")
+        return review
+
+    @router.post("/v1/ops/campaigns/{campaign_id}/samples/{report_id}/split")
+    def split_sample(campaign_id: str, report_id: str, data: SplitReportIn, user=Depends(operator)):
+        report = store.split_sample(campaign_id, report_id, user[0], data.revision)
+        if report is None:
+            raise HTTPException(409, "Chỉ tách được báo cáo từ hồ sơ chờ duyệt còn ít nhất một báo cáo khác. Hãy tải lại hồ sơ.")
+        return report
 
     @router.get("/v1/ops/feedback")
     def verified_feedback(_user=Depends(operator)):
         return {"schema_version": 1, "samples": store.verified_feedback()}
+
+    @router.get("/v1/ops/feedback/samples")
+    def reviewed_samples(after: Annotated[str, Query(max_length=64)] = "", _user=Depends(operator)):
+        return store.reviewed_sample_export(after)
 
     @router.post("/v1/ops/campaigns/{campaign_id}/decision")
     def decide(campaign_id: str, data: DecisionIn, user=Depends(operator)):
         updated = store.review(campaign_id, user[0], data.decision, data.revision)
         if updated is None:
             raise HTTPException(409, "Chiến dịch đã thay đổi. Hãy tải lại trước khi quyết định.")
-        return titled(updated)
+        return {**titled(updated), "alerts": alert_preview(updated)}
 
     @router.post("/v1/ops/campaigns/{campaign_id}/review")
     def edit_review(campaign_id: str, data: ReviewIn, user=Depends(operator)):

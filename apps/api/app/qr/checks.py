@@ -2,6 +2,7 @@ import re
 import subprocess
 
 from ..analyzer.contract import DISCLAIMER, AnalyzerError
+from ..analyzer.evidence.blacklist import lookup as community_domain_match
 from ..analyzer.signals.rules import match_rules
 from ..analyzer.providers.ocr import image_for
 from ..evidence.url_gateway import checked_destination, inspect_url
@@ -39,10 +40,14 @@ def evaluate(data, store, signer, settings, safe_browsing=None):
         keys, _, _ = extract("", payload, signer)
         flagged = store.matches(keys)
         checked, found = safe_browsing.lookup(domains) if safe_browsing else (False, False)
+        community_match = any(item["lookup_allowed"] and community_domain_match(host) for host, item in domains.items())
         risk = "high" if flagged or found or any(item["level"] == "high" for item in domains.values()) else "medium" if (
-            match_rules(data.text) or any(item["level"] == "medium" for item in domains.values())
-        ) else "uncertain"
-        return None, {**checked_destination(destination), "kind": "url", "risk": risk, "confirmed_alert": flagged,
+            community_match or match_rules(data.text) or any(item["level"] == "medium" for item in domains.values())
+        ) else "low" if destination["official_homepage"] and not data.text.strip() else "uncertain"
+        link_evidence = checked_destination(destination)
+        if community_match:
+            link_evidence["signals"].append("Danh sách cảnh báo cộng đồng có tên miền trong nội dung đối chiếu.")
+        return None, {**link_evidence, "kind": "url", "risk": risk, "confirmed_alert": flagged,
                       "threat_intel_checked": checked, "threat_intel_match": found, "disclaimer": DISCLAIMER}
     return evaluate_payment(payload, data.text, store, signer)
 

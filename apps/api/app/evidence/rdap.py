@@ -7,7 +7,7 @@ from .url_gateway import is_public_domain
 REGISTRIES = {suffix: f"https://rdap.verisign.com/{suffix}/v1/domain/" for suffix in ("com", "net")}
 
 
-def lookup_age(domains, limits, quota):
+def lookup_age(domains, limits, quota, *, explicit_website=False):
     if not quota:
         return None
     for domain in sorted(domains.values(), key=lambda item: item["score"], reverse=True):
@@ -15,7 +15,7 @@ def lookup_age(domains, limits, quota):
         if not root or root != domain["registered_domain"]:
             continue
         endpoint = REGISTRIES.get(root.rsplit(".", 1)[-1])
-        if not (domain["lookup_allowed"] and domain["score"] >= 20 and endpoint and is_public_domain(root)):
+        if not (domain["lookup_allowed"] and (explicit_website or domain["score"] >= 20) and endpoint and is_public_domain(root)):
             continue
         if not limits.take("rdap-hourly", quota, 3600):
             break
@@ -27,7 +27,7 @@ def lookup_age(domains, limits, quota):
                 if event.get("eventAction") == "registration":
                     registered = datetime.fromisoformat(event["eventDate"].replace("Z", "+00:00"))
                     age = (datetime.now(timezone.utc) - registered).days
-                    return (domain["host"], age) if age >= 0 else None
+                    return (domain["host"], age, registered.astimezone(timezone.utc).date().isoformat()) if age >= 0 else None
         except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError, OverflowError):
             pass
         break

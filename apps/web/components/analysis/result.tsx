@@ -6,6 +6,7 @@ import { api, ApiError, entityLabels, riskLabels, saveSession, type Analysis, ty
 import { projectName } from "@/components/brand";
 import { LoginForm } from "@/components/login-form";
 import { ReceiptEvidence } from "./receipt-evidence";
+import { WebsiteReportPanel, type WebsiteRefresh } from "./website-report";
 
 const sources: Record<string, string> = {
   internal_blacklist: "Chiến dịch đã duyệt",
@@ -18,9 +19,12 @@ const sources: Record<string, string> = {
   document: "Phân tích biên lai",
   rdap: "Dữ liệu đăng ký tên miền",
   fraud_url_ml: "Mô hình nhận diện phishing",
+  website_content: "Nội dung HTML công khai",
 };
 
-export function Result({ result, initialSession, receipt }: { result: Analysis; initialSession: Session | null; receipt?: File | null }) {
+export function Result({ result, initialSession, receipt, websiteImage, websiteRefresh }: {
+  result: Analysis; initialSession: Session | null; receipt?: File | null; websiteImage?: File | null; websiteRefresh?: WebsiteRefresh;
+}) {
   const [session, setSession] = useState(initialSession);
   const [signingIn, setSigningIn] = useState(false);
   const [reported, setReported] = useState(false);
@@ -29,6 +33,13 @@ export function Result({ result, initialSession, receipt }: { result: Analysis; 
   const [message, setMessage] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const confirmed = result.evidence.some(item => item.source === "internal_blacklist" && item.weight > 0);
+  const limitedWebsite = Boolean(result.website_report) && result.risk_level === "uncertain" && result.risk_score === 0;
+  const officialBrand = result.url_checks?.length === 1 ? result.url_checks[0].official_brand : null;
+  const urlOnly = result.website_report && !result.website_report.screenshot && !result.website_report.markup &&
+    !result.website_report.article && result.website_report.public_page?.status !== "read";
+  const summary = limitedWebsite && urlOnly ? (officialBrand ?
+    `Địa chỉ thuộc tên miền chính thức của ${officialBrand}. Nội dung cụ thể của trang chưa được kiểm tra.` :
+    "Chưa thấy tín hiệu rủi ro trong dữ liệu đối chiếu. Nội dung cụ thể của trang chưa được kiểm tra.") : result.summary;
 
   async function report(activeSession: Session) {
     setPending("report");
@@ -71,18 +82,26 @@ export function Result({ result, initialSession, receipt }: { result: Analysis; 
     }
   }
 
-  return (
-    <section className="panel result-panel" aria-label="Kết quả phân tích">
-      <div className={"result-banner risk-" + result.risk_level}>
+  const riskTitle = limitedWebsite && urlOnly ? "Cần xác minh nội dung trang" : riskLabels[result.risk_level];
+  const banner = result.website_report ? <div className="website-assessment">
+    <h2 className={`website-assessment-label risk-${result.risk_level}`}>{riskTitle}</h2>
+    <p className="website-assessment-score">Điểm rủi ro <strong className={`risk-${result.risk_level}`}>
+      {limitedWebsite ? "Chưa đủ dữ liệu" : `${result.risk_score}/100`}
+    </strong></p>
+    <p className="muted">{summary}</p>
+  </div> : <div className={"result-banner risk-" + result.risk_level}>
         <span className="result-icon">{result.risk_level === "low" ? <ShieldCheck size={26} /> : <AlertTriangle size={26} />}</span>
-        <div><h2>{riskLabels[result.risk_level]}</h2><p>{result.summary}</p></div>
-        <div className="result-score" aria-label={result.risk_score + " trên 100"}>{result.risk_score}<small>/100</small></div>
-      </div>
+        <div><h2>{riskTitle}</h2><p>{summary}</p></div>
+        {!limitedWebsite && <div className="result-score" aria-label={result.risk_score + " trên 100"}>{result.risk_score}<small>/100</small></div>}
+      </div>;
+  return (
+    <section className={result.website_report ? "result-panel website-result-panel" : "panel result-panel"} aria-label="Kết quả phân tích">
+      {result.website_report ? <WebsiteReportPanel result={result} image={websiteImage} banner={banner} refresh={websiteRefresh} /> : banner}
       <div className="result-body">
         {confirmed && <p className="notice verified"><ShieldCheck size={20} /> Cảnh báo đã được chuyên viên xác nhận.</p>}
-        {result.degraded && <p className="notice"><Info size={19} /> Chế độ hạn chế. Một phần dịch vụ đối chiếu hoặc mô hình đang tắt hoặc gián đoạn.</p>}
+        {result.degraded && !result.website_report && <p className="notice"><Info size={19} /> Chế độ hạn chế. Một phần dịch vụ đối chiếu hoặc mô hình đang tắt hoặc gián đoạn.</p>}
         {result.document && <ReceiptEvidence evidence={result.document} file={receipt} />}
-        {result.url_checks && <details className="details">
+        {!result.website_report && result.url_checks && <details className="details">
           <summary>Kiểm tra tên miền</summary>
           <ul className="evidence">{result.url_checks.map((item, index) => <li key={item.host + index}>
             <strong className="qr-host">{item.host}</strong>
@@ -98,7 +117,10 @@ export function Result({ result, initialSession, receipt }: { result: Analysis; 
         <ul className="question-list">{result.verification_questions.map(question => <li key={question}>{question}</li>)}</ul>
         {!!result.guidance?.length && <details className="details">
           <summary>Hướng dẫn theo nhóm thủ đoạn</summary>
-          <ul className="question-list">{result.guidance.map(item => <li key={item.id}>{item.text}</li>)}</ul>
+          <ul className="question-list">{result.guidance.map(item => <li key={item.id}>{item.text}
+            {item.source_url && <a className="website-source-link" href={item.source_url} target="_blank"
+              rel="noopener noreferrer">Xem hướng dẫn gốc</a>}
+          </li>)}</ul>
         </details>}
         {(result.entities.length > 0 || result.evidence.length > 0) &&
           <details className="details">

@@ -9,6 +9,7 @@ from tldextract import TLDExtract
 from ..kit import domain_check
 
 HOST = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+")
+REDIRECT_HINT = re.compile(r"(?:^|&)(?:next|redirect(?:_uri|_url)?|return(?:_to|_url)?|continue|destination)=", re.I)
 REGISTRY_SUFFIX = TLDExtract(cache_dir=None, suffix_list_urls=())
 TENANT_SUFFIX = TLDExtract(cache_dir=None, suffix_list_urls=(), include_psl_private_domains=True)
 LOCAL_SUFFIXES = (".localhost", ".local", ".internal", ".lan", ".home.arpa", ".test", ".invalid", ".example")
@@ -71,9 +72,18 @@ def inspect_url(value):
                 break
     if (address is not None and not address.is_global) or (address is None and not is_web_domain(host)):
         add("restricted_host", 45, "Địa chỉ thuộc mạng nội bộ hoặc vùng tên miền hạn chế.")
+    if REDIRECT_HINT.search(parts.query):
+        add("redirect_hint", 0, "URL có tham số thường dùng để chuyển hướng. Đích thực tế chưa được xác minh.")
     result["score"] = max(0, min(100, sum(item["points"] for item in signals if item["points"] > 0)))
     result["level"] = "high" if result["score"] >= 45 else "medium" if result["score"] >= 20 else "low"
     result["lookup_allowed"] = address is None and is_public_domain(host)
+    result["official_brand"] = domain_check.OFFICIAL.get(host.removeprefix("www."))
+    # The allowlist verifies a known origin. Limit the low-risk route to its homepage.
+    result["official_homepage"] = (
+        result["lookup_allowed"] and parts.scheme == "https" and result["score"] == 0
+        and result["official_brand"] is not None
+        and parts.path in {"", "/"} and not parts.query and not parts.fragment
+    )
     return result
 
 
@@ -81,4 +91,5 @@ def checked_destination(domain):
     host = re.sub(r"\d{6,}", "••••", domain["host"])
     return {"host": host, "level": domain["level"],
             "signals": [re.sub(r"\d{6,}", "••••", item["detail"]) for item in domain["signals"]],
-            "domain_age_days": domain["domain_age_days"]}
+            "domain_age_days": domain["domain_age_days"], "domain_registered_on": domain.get("domain_registered_on"),
+            "official_brand": domain["official_brand"]}

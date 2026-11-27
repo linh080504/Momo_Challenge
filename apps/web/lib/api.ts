@@ -3,7 +3,20 @@ export const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:800
 export type Risk = "high" | "medium" | "uncertain" | "low";
 export type Entity = { type: string; display: string };
 export type Region = [number, number, number, number];
-export type UrlCheck = { host: string; level: "low" | "medium" | "high"; domain_age_days: number | null; signals: string[] };
+export type UrlCheck = { host: string; level: "low" | "medium" | "high"; domain_age_days: number | null;
+  domain_registered_on?: string | null; signals: string[]; official_brand?: string | null };
+export type WebsiteReport = {
+  capture_scope?: "listed" | "unlisted";
+  public_page?: { status: "read" | "restricted" | "redirect" | "unsupported" | "unavailable" | "too_large" | "busy";
+    model?: string | null; title?: string | null; capture_jpeg?: string | null; findings?: string[];
+    checked_at?: number; explanation?: { label: string; finding: string; support?: string; source_url?: string }[] };
+  sources: Record<"domain" | "community" | "approved_cases" | "safe_browsing" | "rdap", "match" | "clear" | "checked" | "unavailable">;
+  source_limits?: Partial<Record<"safe_browsing" | "rdap", string>>;
+  article?: { publisher: string; host: string; title: string; image_webp: string | null; capture_jpeg?: string | null; findings: string[];
+    context: "educational" | "uncertain"; model: string | null };
+  screenshot: { credential_labels: string[]; brands: { name: string; domain_matches: boolean }[] } | null;
+  markup: { status: "checked" | "unreadable"; findings: string[] } | null;
+};
 export type DocumentEvidence = {
   ocr_boxes: Region[];
   recompression_regions: Region[];
@@ -27,16 +40,20 @@ export type Analysis = {
   analysis_path?: "fast" | "deep";
   document?: DocumentEvidence;
   url_checks?: UrlCheck[];
-  guidance?: { id: string; text: string }[];
+  website_report?: WebsiteReport;
+  guidance?: { id: string; text: string; source_url?: string; version?: string }[];
 };
 export type AnalysisEvent = {
   stage: string;
   message: string;
   entities?: Entity[];
+  website_capture?: { jpeg: string; host: string };
 };
 export type Input = {
   text: string;
   url?: string;
+  website_html?: string;
+  website_preview?: boolean;
   image_base64?: string;
   image_mime?: string;
   image_kind?: "image" | "receipt";
@@ -46,19 +63,32 @@ export type Input = {
 export type Account = { email: string; role: "user" | "ops" };
 export type Session = Account & { token: string };
 export type CampaignState = "pending" | "approved" | "rejected";
+export type SampleLabel = "scam" | "legit" | "uncertain" | "withdrawn";
+export type SampleReview = { label: SampleLabel; revision: number; actor: string; created: number };
+export type OpsSample = {
+  id: string; created: number; risk: Risk; group: string | null; signals: string[];
+  inputs: string[] | null; history: SampleReview[];
+};
+export type OpsOverview = { reports_24h: number; decisions_24h: number; pending: number; approved: number };
+export type CampaignAlerts = { transaction_status: "unverified"; channels: {
+  id: "web" | "in_app" | "email" | "sms" | "internal"; state: "preview" | "published"; title: string; body: string;
+}[] };
+export type AgentReview = { status: "ok" | "quota" | "unavailable" | "invalid" | "disabled"; model: string | null; note: string | null };
 export type Investigation = {
   nodes: { id: string; label: string; count: number | null }[];
-  edges: { from: string; to: string; count: number }[];
+  edges: { from: string; to: string; count: number | null; source?: "report_cooccurrence"; last_seen?: number | null }[];
   related_campaigns: { id: string; state: CampaignState; shared_entities: number }[];
+  review?: AgentReview;
 };
 export type OpsWorkspace = {
   permission: "draft_only";
-  detection: { risk: Risk; group: string | null; signals: string[]; source_counts: Record<string, number> };
-  threat_intel: { confirmed_related_campaigns: string[]; safe_browsing_hits: number };
-  forensics: { reviewed_input_counts: Record<string, number>; ocr_regions: number; jpeg_regions: number; transaction_status: "unverified" };
+  supervisor_review?: AgentReview;
+  detection: { risk: Risk; group: string | null; signals: string[]; source_counts: Record<string, number>; review?: AgentReview };
+  threat_intel: { confirmed_related_campaigns: string[]; safe_browsing_hits: number; review?: AgentReview };
+  forensics: { reviewed_input_counts: Record<string, number>; ocr_regions: number; jpeg_regions: number; transaction_status: "unverified"; review?: AgentReview };
   investigation: Investigation;
-  protection: { recommendations: string[] };
-  report: { title: string; summary: string; recommendation: string; approval_required: true; status: "draft" };
+  protection: { recommendations: string[]; review?: AgentReview };
+  report: { title: string; summary: string; recommendation: string; approval_required: true; status: "draft"; review?: AgentReview };
 };
 export type Campaign = {
   id: string;
@@ -72,8 +102,9 @@ export type Campaign = {
   entities: Record<string, number>;
   signals: string[];
   created: number;
-  history: { actor: string; action: "approve" | "reject" | "edit_group"; created: number }[];
+  history: { actor: string; action: "approve" | "reject" | "edit_group" | "split_sample"; created: number }[];
   workspace?: OpsWorkspace;
+  alerts?: CampaignAlerts;
 };
 
 export class ApiError extends Error {

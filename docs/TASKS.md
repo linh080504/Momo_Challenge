@@ -102,7 +102,7 @@ Các hàng dưới đây là đầu việc của phiên bản nâng cấp. Vai t
 | U-01 | eval-qa | Tạo bộ dữ liệu SMS/chat, URL, QR, ảnh, ghi âm và biên lai tiếng Việt. Ghi nguồn, quyền dùng, lớp sạch/gian lận, chiến dịch và vùng bằng chứng. | Quyền dữ liệu và người gán nhãn | Manifest dataset, phân bố lớp, kiểm tra dữ liệu nhạy cảm và holdout tách theo chiến dịch/tên miền/người nói hoặc mẫu biên lai. |
 | U-02 | backend-engineer | Khóa baseline local và staging, chuẩn hóa cấu hình Qwen, Safe Browsing, RDAP, PostgreSQL và vai demo. | Tài khoản và hạn mức dịch vụ | Smoke test có phiên bản mã, cấu hình, provider, p95 theo loại đầu vào và kết quả khi mất kết nối. |
 | U-03 | security-reviewer | Rà ứng dụng kiểm tra URL/QR, quy tắc egress, ranh giới LLM, dữ liệu HMAC và quyền truy cập lưu trữ. | U-02 | Các ca kiểm thử xác nhận dữ liệu thô được giữ trong luồng xử lý phù hợp, endpoint ngoài được cố định và vai người dùng không mở được chức năng vận hành. |
-| U-04 | ai-engineer | Huấn luyện FraudURL-LightGBM trên tập đã xác minh, so sánh XGBoost, đo recall, báo nhầm và Brier score. Thử nạp artifact đạt yêu cầu. | U-01 | So sánh có holdout tách tên miền, manifest và checksum trùng artifact đã thử. |
+| U-04 | eval-qa | Đo chất lượng cổng kiểm tra URL hiện tại trên các cặp link giả mạo và link chính thức đã xác minh. Bao gồm link nhập trực tiếp, link trong tin nhắn, QR liên kết và nguồn tra cứu không khả dụng. | U-01 và U-03 | Báo cáo recall, báo nhầm, số ca `uncertain` và độ trễ theo kênh. Ghi nguồn bằng chứng, cấu hình tra cứu và nhóm tên miền dùng để đánh giá. |
 | U-05 | ai-engineer | Tạo ứng viên FraudBERT-VN đa nhiệm. Xuất PhoBERT sang ONNX INT8 và so sánh với bản gốc. | U-01 có nhãn thủ đoạn và vùng chữ | Báo cáo sai khác chất lượng cho ba đầu ra, độ trễ CPU và kích cỡ artifact. |
 | U-06 | ai-engineer | Chạy Whisper `large-v3-turbo` và benchmark AASIST/XLS-R cho FraudVoice-VN. | U-01 có bản ghi được phép dùng, máy chạy Whisper | Đo WER theo nhóm giọng và độ nhiễu, thêm recall và báo nhầm riêng cho phát hiện giả mạo giọng. |
 | U-07 | ai-engineer | So sánh OCR hiện tại với PP-OCRv5, PP-OCRv6 và PaddleOCR-VL. Benchmark FraudDoc-VN với DTD/DocTamper, OpenCV và dữ liệu biên lai. | U-01 có cặp nguyên bản, ảnh nén và vùng chỉnh sửa | Có bảng so sánh OCR tiếng Việt, chất lượng định vị vùng, tỷ lệ báo nhầm trên ảnh nén và p95. |
@@ -121,10 +121,10 @@ Số bước tương ứng với [Kế hoạch xây dựng từng bước](PLAN.
 |---|---|---|---|
 | 1. Luồng và hợp đồng | PM + BE | U-02, U-10 | `docs/PRODUCT_BRIEF.md`, `apps/api/app/schemas/`, `apps/api/app/api/`, `apps/web/lib/api.ts` |
 | 2. Môi trường và baseline | BE | U-02 | `.env.example`, `compose.yaml`, `infra/deploy/`, `infra/supabase/`, `eval/reports/` |
-| 3. Cổng bảo mật | BE + security-reviewer | U-03 | `apps/api/app/evidence/`, `apps/api/app/privacy/`, `apps/api/app/qr/`, `apps/api/app/auth/`, `apps/api/tests/` |
+| 3. Cổng bảo mật | BE + security-reviewer | U-03, U-04 | `apps/api/app/evidence/`, `apps/api/app/privacy/`, `apps/api/app/qr/`, `apps/api/app/auth/`, `apps/api/tests/`, `eval/` |
 | 4. Dữ liệu và nội dung | QA + PM | U-01 | `eval/`, `prompts/`, `docs/PRODUCT_BRIEF.md`, `docs/USER_TESTS.md` |
 | 5. Sáu đầu vào và giao diện | FE + BE | U-06, U-07, U-10 | `apps/web/app/`, `apps/web/components/analysis/`, `apps/web/lib/`, `apps/api/app/analyzer/providers/`, `tests/e2e/` |
-| 6. Mô hình chuyên biệt | AI + QA | U-04, U-05, U-06, U-07 | `eval/train_fraud_url.py`, `apps/api/app/analyzer/providers/`, `eval/` |
+| 6. Mô hình chuyên biệt | AI + QA | U-05, U-06, U-07 | `apps/api/app/analyzer/providers/`, `eval/` |
 | 7. Pháp y ảnh và chất lượng nghe nhìn | AI + QA | U-06, U-07, U-10 | `apps/api/app/analyzer/signals/`, `apps/api/app/analyzer/providers/`, `apps/web/components/analysis/`, `eval/` |
 | 8. Suy luận sâu và RAG | AI | U-08 | `apps/api/app/analyzer/`, `prompts/` |
 | 9. Đồ thị và điểm rủi ro | BE + AI | U-09 | `apps/api/app/db/`, `apps/api/app/reports/`, `apps/api/app/ops/`, `apps/api/app/analyzer/`, `eval/` |
@@ -149,6 +149,8 @@ Khi hợp đồng và smoke baseline đã có bằng chứng, tiếp tục kiể
 
 - **U-01 · QA.** Tiếp nhận dữ liệu đã ẩn danh, ghi quyền sử dụng, xác minh nhãn và khóa holdout. Ưu tiên cặp tập URL `phishing`/`benign` để mở U-04 và bản ghi tiếng Việt kèm tham chiếu để mở benchmark ASR.
 - **U-03 · BE và người phụ trách bảo mật.** Xác minh Safe Browsing với khóa của môi trường đích và kiểm tra chính sách mạng/lưu trữ trên hạ tầng staging từ xa.
-- **U-04 · AI.** Khi có dữ liệu đã duyệt, đánh giá FraudURL theo holdout tách tên miền. Dùng kết quả smoke sáu đầu vào làm ca hồi quy kỹ thuật cho định tuyến và hiệu chuẩn, giữ cổng đánh giá chính thức theo Product Brief.
+- **U-04 · QA.** Đánh giá cổng URL trên tập `phishing`/`benign` đã xác minh. Dùng các ca `uncertain` để rà bằng chứng và định tuyến. Giữ ngưỡng đánh giá trong Product Brief.
 
 [Tiến độ các bước và kết quả đo](STATUS.md#tiến-độ-thực-hiện-15-bước)
+
+[Bàn giao từng đầu vào, thao tác vận hành và trạng thái 15 bước](MVP_HANDOFF.md)

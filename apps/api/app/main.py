@@ -42,7 +42,7 @@ def create_app(settings=None):
                 def check_migration():
                     tables = set(inspect(store.engine).get_table_names(schema="tkc"))
                     if not set(Base.metadata.tables).issubset(tables):
-                        raise RuntimeError("Chạy migration infra/supabase/migrations/001_mvp.sql trước khi khởi động.")
+                        raise RuntimeError("Chạy các migration trong infra/supabase/migrations trước khi khởi động.")
                 await run_in_threadpool(check_migration)
             else:
                 await run_in_threadpool(Base.metadata.create_all, store.engine)

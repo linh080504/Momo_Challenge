@@ -39,7 +39,7 @@
       "items": {
         "type": "object", "required": ["source", "finding"],
         "properties": {
-          "source": {"type": "string", "enum": ["internal_blacklist", "external_blacklist", "safe_browsing", "domain_check", "rdap", "vietqr", "rules", "llm", "document", "fraud_url_ml"]},
+          "source": {"type": "string", "enum": ["internal_blacklist", "external_blacklist", "safe_browsing", "domain_check", "rdap", "vietqr", "rules", "llm", "document", "fraud_url_ml", "website_content"]},
           "finding": {"type": "string"},
           "weight": {"type": "integer"}
         }
@@ -51,17 +51,70 @@
     "specialized_models": {"type": "object", "properties": {"fraud_url": {"type": "string"}}},
     "guidance": {"type": "array", "maxItems": 3, "items": {
       "type": "object", "required": ["id", "text"],
-      "properties": {"id": {"type": "string"}, "text": {"type": "string"}}
+      "properties": {"id": {"type": "string"}, "text": {"type": "string"},
+                     "source_url": {"type": "string", "pattern": "^https://"}, "version": {"type": "string"}}
     }},
     "url_checks": {"type": "array", "maxItems": 6, "items": {
       "type": "object", "required": ["host", "level", "signals", "domain_age_days"],
       "properties": {
         "host": {"type": "string"},
+        "official_brand": {"type": ["string", "null"]},
         "level": {"enum": ["low", "medium", "high"]},
         "signals": {"type": "array", "items": {"type": "string"}},
-        "domain_age_days": {"type": ["integer", "null"], "minimum": 0}
+        "domain_age_days": {"type": ["integer", "null"], "minimum": 0},
+        "domain_registered_on": {"type": ["string", "null"], "format": "date"}
       }
     }},
+    "website_report": {
+      "type": "object", "required": ["sources", "screenshot", "markup"],
+      "properties": {
+        "capture_scope": {"enum": ["listed", "unlisted"]},
+        "public_page": {"type": "object", "required": ["status"], "properties": {
+          "status": {"enum": ["read", "restricted", "redirect", "unsupported", "unavailable", "too_large", "busy"]},
+          "model": {"type": ["string", "null"]}, "title": {"type": ["string", "null"], "maxLength": 140},
+          "capture_jpeg": {"type": ["string", "null"]},
+          "checked_at": {"type": "integer", "minimum": 0, "maximum": 9999999999},
+          "explanation": {"type": "array", "minItems": 2, "maxItems": 6, "items": {
+            "type": "object", "required": ["label", "finding"], "properties": {
+              "label": {"type": "string"}, "finding": {"type": "string"},
+              "source_url": {"type": "string", "pattern": "^https://", "maxLength": 500},
+              "support": {"type": "string", "maxLength": 440}
+            }
+          }},
+          "findings": {"type": "array", "maxItems": 8, "items": {"type": "string"}}
+        }},
+        "sources": {
+          "type": "object", "required": ["domain", "community", "approved_cases", "safe_browsing", "rdap"],
+          "properties": {
+            "domain": {"enum": ["match", "clear"]},
+            "community": {"enum": ["match", "clear", "unavailable"]},
+            "approved_cases": {"enum": ["match", "clear"]},
+            "safe_browsing": {"enum": ["match", "clear", "unavailable"]},
+            "rdap": {"enum": ["checked", "unavailable"]}
+          }
+        },
+        "source_limits": {"type": "object", "properties": {
+          "safe_browsing": {"type": "string"}, "rdap": {"type": "string"}
+        }},
+        "article": {"type": "object", "required": ["publisher", "host", "title", "image_webp", "findings", "context", "model"], "properties": {
+          "publisher": {"type": "string"}, "host": {"type": "string"}, "title": {"type": "string", "maxLength": 180},
+          "image_webp": {"type": ["string", "null"]}, "capture_jpeg": {"type": ["string", "null"]}, "model": {"type": ["string", "null"]},
+          "findings": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
+          "context": {"enum": ["educational", "uncertain"]}
+        }},
+        "screenshot": {"type": ["object", "null"], "required": ["credential_labels", "brands"], "properties": {
+          "credential_labels": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
+          "brands": {"type": "array", "maxItems": 3, "items": {
+            "type": "object", "required": ["name", "domain_matches"],
+            "properties": {"name": {"type": "string"}, "domain_matches": {"type": "boolean"}}
+          }}
+        }},
+        "markup": {"type": ["object", "null"], "required": ["status", "findings"], "properties": {
+          "status": {"enum": ["checked", "unreadable"]},
+          "findings": {"type": "array", "maxItems": 5, "items": {"type": "string"}}
+        }}
+      }
+    },
     "document": {
       "type": "object",
       "required": ["ocr_boxes", "recompression_regions", "signals", "transaction_status", "notice"],

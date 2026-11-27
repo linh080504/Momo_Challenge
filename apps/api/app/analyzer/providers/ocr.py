@@ -2,6 +2,7 @@ import base64
 import binascii
 import csv
 import io
+import os
 import subprocess
 
 from PIL import Image, ImageOps
@@ -68,7 +69,8 @@ def _recognize(image, settings, *, boxes):
             result = subprocess.run(
                 [settings.ocr_command, "stdin", "stdout", "-l", settings.ocr_languages, "--psm", "11"]
                 + (["tsv"] if boxes else []),
-                input=buffer.getvalue(), capture_output=True, check=True, timeout=5,
+                input=buffer.getvalue(), capture_output=True, check=True, timeout=10,
+                env={**os.environ, "OMP_THREAD_LIMIT": "1"},
             )
             text = result.stdout.decode("utf-8", errors="replace")
         else:

@@ -22,14 +22,13 @@ class Settings(BaseSettings):
     whisper_command: str = ""
     whisper_model_path: str = ""
     node_command: str = "node"
-    llm_base_url: str = ""
-    llm_api_key: str = ""
-    llm_model: str = ""
-    llm_fallback_model: str = ""
     dashscope_api_key: SecretStr = SecretStr("")
     safe_browsing_key: str = ""
+    website_capture_enabled: bool = False
+    website_public_html_enabled: bool = False
     rdap_lookups_per_hour: int = Field(0, ge=0, le=30)
     fraud_url_model_path: str = ""
     analysis_per_minute: int = Field(30, gt=0)
     demo_analysis_per_minute: int = Field(120, gt=0)
+    reports_per_minute: int = Field(12, gt=0, le=120)
     llm_calls_per_day: int = Field(300, ge=0)

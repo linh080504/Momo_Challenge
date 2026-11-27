@@ -5,9 +5,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Check, Inbox, LayoutGrid, RefreshCw, X } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
 import { InvestigationWorkspace } from "./investigation";
+import { SampleReviewPanel } from "./sample-review";
 import {
   api, ApiError, currentSession, entityLabels, riskLabels, saveSession,
-  type Campaign, type CampaignState, type Session,
+  type Campaign, type CampaignState, type OpsOverview, type Session,
 } from "@/lib/api";
 
 const labels: Record<CampaignState, string> = { pending: "Chờ duyệt", approved: "Đã duyệt", rejected: "Đã bác bỏ" };
@@ -15,9 +16,10 @@ const groups = {
   G1: "Mạo danh cơ quan, tổ chức", G2: "Mạo danh người quen", G3: "Đầu tư hoặc tuyển dụng",
   G4: "Mua bán và giao dịch trực tuyến", G5: "Đánh cắp dữ liệu hoặc tài khoản",
 };
-const historyLabels = { approve: "Duyệt", reject: "Bác bỏ", edit_group: "Cập nhật phân loại" };
+const historyLabels = { approve: "Duyệt", reject: "Bác bỏ", edit_group: "Cập nhật phân loại", split_sample: "Tách báo cáo" };
 const filters: CampaignState[] = ["pending", "approved", "rejected"];
 const formatDate = (seconds: number) => new Date(seconds * 1000).toLocaleString("vi-VN");
+const channelLabels = { web: "Website", in_app: "Trong ứng dụng", email: "Email", sms: "SMS", internal: "Nội bộ" };
 
 export function Workspace({ campaignId }: { campaignId?: string }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -25,6 +27,7 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
   const [state, setState] = useState<CampaignState>("pending");
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [detail, setDetail] = useState<Campaign | null>(null);
+  const [overview, setOverview] = useState<OpsOverview | null>(null);
   const [reload, setReload] = useState(0);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -44,7 +47,10 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
     const options = ["GET", undefined, session.token, controller.signal] as const;
     const fetchData = campaignId
       ? api<Campaign>("/v1/ops/campaigns/" + encodeURIComponent(campaignId), ...options).then(setDetail)
-      : api<Campaign[]>("/v1/ops/campaigns?state=" + state, ...options).then(setCampaigns);
+      : Promise.all([
+        api<Campaign[]>("/v1/ops/campaigns?state=" + state, ...options),
+        api<OpsOverview>("/v1/ops/overview", ...options),
+      ]).then(([items, metrics]) => { setCampaigns(items); setOverview(metrics); });
     fetchData.catch(failure => {
       if (controller.signal.aborted) return;
       if (failure instanceof ApiError && (failure.status === 401 || failure.status === 403)) {
@@ -61,9 +67,9 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
     setWorking(true);
     setError("");
     try {
-      setDetail(await api<Campaign>("/v1/ops/campaigns/" + detail.id + "/decision", "POST",
-        { decision, revision: detail.revision }, session.token));
-      setReload(value => value + 1);
+      const updated = await api<Campaign>("/v1/ops/campaigns/" + detail.id + "/decision", "POST",
+        { decision, revision: detail.revision }, session.token);
+      setDetail({ ...detail, ...updated });
     } catch (failure) {
       setError((failure as Error).message);
     } finally {
@@ -116,6 +122,16 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
         <p className="muted">Mã {detail.id.slice(0, 8).toUpperCase()} · {formatDate(detail.created)}</p>
         <p>{detail.summary}</p>
         {detail.workspace && <InvestigationWorkspace workspace={detail.workspace} />}
+        {detail.alerts && <details className="details">
+          <summary>Cảnh báo theo kênh</summary>
+          <p className="muted">Đối chiếu trạng thái giao dịch qua ngân hàng. Hồ sơ hiện chưa có kết quả xác minh giao dịch.</p>
+          <ul className="question-list">{detail.alerts.channels.map(channel => <li key={channel.id}>
+            <strong>{channelLabels[channel.id]} · {channel.state === "published" ? "Đã bật cảnh báo khi kiểm tra trùng" : "Bản xem trước"}</strong>
+            <p>{channel.title}</p><p>{channel.body}</p>
+          </li>)}</ul>
+        </details>}
+        <SampleReviewPanel campaignId={detail.id} token={session.token}
+          splitRevision={detail.state === "pending" && detail.report_count > 1 ? detail.revision : undefined} />
         <h3>Thông tin đối chiếu</h3>
         <p>{Object.entries(detail.entities).map(([kind, count]) => count + " " + (entityLabels[kind]?.toLowerCase() || kind)).join(" · ") || "Chưa có thực thể dùng để đối chiếu."}</p>
         <h3>Bằng chứng từ báo cáo</h3>
@@ -146,6 +162,12 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
         </div>}
       </section> : !error && <p role="status">Đang tải chiến dịch…</p> :
         <section className="panel workspace-panel">
+          {overview && <dl className="ops-overview" aria-label="Tổng quan vận hành">
+            <div><dt>Báo cáo trong 24 giờ</dt><dd>{overview.reports_24h}</dd></div>
+            <div><dt>Quyết định trong 24 giờ</dt><dd>{overview.decisions_24h}</dd></div>
+            <div><dt>Chiến dịch chờ duyệt</dt><dd>{overview.pending}</dd></div>
+            <div><dt>Chiến dịch đã duyệt</dt><dd>{overview.approved}</dd></div>
+          </dl>}
           <div className="workspace-filters" role="group" aria-label="Trạng thái chiến dịch">{filters.map(filter =>
             <button type="button" key={filter} className={filter === state ? "filter active" : "filter"} aria-pressed={filter === state}
               onClick={() => setState(filter)}>{labels[filter]}</button>

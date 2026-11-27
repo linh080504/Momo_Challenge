@@ -21,6 +21,7 @@ OFFICIAL = {
     "dichvucong.gov.vn": "Cổng DVC quốc gia", "bocongan.gov.vn": "Bộ Công an", "vss.gov.vn": "BHXH VN",
     "evn.com.vn": "EVN", "shopee.vn": "Shopee", "tiki.vn": "Tiki", "lazada.vn": "Lazada",
     "tinnhiemmang.vn": "NCSC", "chongluadao.vn": "Chống Lừa Đảo",
+    "kaspersky.com.vn": "Kaspersky",
 }
 BRAND_TOKENS = {
     "vietcombank": "vietcombank.com.vn", "vcb": "vietcombank.com.vn", "vietinbank": "vietinbank.vn",
@@ -29,7 +30,7 @@ BRAND_TOKENS = {
     "momo": "momo.vn", "zalopay": "zalopay.vn", "vnpay": "vnpay.vn", "napas": "napas.com.vn",
     "dichvucong": "dichvucong.gov.vn", "congan": "bocongan.gov.vn", "bocongan": "bocongan.gov.vn",
     "baohiemxahoi": "vss.gov.vn", "bhxh": "vss.gov.vn", "evn": "evn.com.vn", "shopee": "shopee.vn",
-    "vneid": "vneid.gov.vn",
+    "vneid": "vneid.gov.vn", "kaspersky": "kaspersky.com.vn",
 }
 RISKY_TLDS = {"xyz", "top", "cc", "club", "icu", "online", "site", "live", "vip", "buzz", "shop", "click",
               "link", "info", "work", "rest", "cfd", "sbs", "lol", "monster", "tk", "ml", "ga", "cf", "gq"}

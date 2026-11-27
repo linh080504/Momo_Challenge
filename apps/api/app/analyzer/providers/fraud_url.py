@@ -22,13 +22,15 @@ def features(destination):
 
 class FraudURL:
     def __init__(self, artifact):
-        from lightgbm import Booster
-
         model_path = Path(artifact)
         manifest = json.loads(model_path.with_name("manifest.json").read_text(encoding="utf-8"))
+        if manifest.get("stage") == "benchmark_only":
+            raise ValueError("Benchmark-only FraudURL artifacts cannot be enabled in the application.")
         if (manifest.get("schema_version") != 1 or manifest.get("features") != list(FEATURES)
                 or manifest.get("artifact_sha256") != hashlib.sha256(model_path.read_bytes()).hexdigest()):
             raise ValueError("FraudURL artifact does not match its registry manifest.")
+        from lightgbm import Booster
+
         self.model = Booster(model_file=model_path)
         self.version = manifest["model"]
         if self.model.feature_name() != list(FEATURES) or self.model.num_model_per_iteration() != 1:

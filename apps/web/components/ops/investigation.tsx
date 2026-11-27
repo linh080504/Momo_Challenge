@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { riskLabels, type Investigation, type OpsWorkspace } from "@/lib/api";
+import { riskLabels, type AgentReview, type Investigation, type OpsWorkspace } from "@/lib/api";
 
 function CampaignGraph({ graph }: { graph: Investigation }) {
   const [selected, setSelected] = useState("campaign");
@@ -38,7 +38,11 @@ function CampaignGraph({ graph }: { graph: Investigation }) {
       <strong>{activeNode.label}</strong>
       <ul>{adjacent.map(edge => {
         const neighbor = graph.nodes.find(node => node.id === (edge.from === activeNode.id ? edge.to : edge.from));
-        return <li key={edge.from + edge.to}>{neighbor?.label} · {edge.count}</li>;
+        return <li key={edge.from + edge.to}>
+          {neighbor?.label} · {edge.count}
+          {edge.source === "report_cooccurrence" && " báo cáo có cả hai tín hiệu"}
+          {edge.last_seen && <> · Gần nhất {new Date(edge.last_seen * 1000).toLocaleString("vi-VN")}</>}
+        </li>;
       })}</ul>
     </div>
   </div>;
@@ -46,12 +50,28 @@ function CampaignGraph({ graph }: { graph: Investigation }) {
 
 const mediaLabels: Record<string, string> = { receipt: "biên lai", image: "ảnh", audio: "bản ghi âm" };
 
+const reviewStatus = {
+  ok: "",
+  disabled: "Qwen chưa được cấu hình.",
+  quota: "Đã hết lượt gọi Qwen hôm nay.",
+  unavailable: "Chưa nhận được phản hồi từ Qwen.",
+  invalid: "Phản hồi Qwen chưa hợp lệ.",
+};
+
+function ReviewNote({ review }: { review?: AgentReview }) {
+  if (!review) return null;
+  return review.status === "ok" ? <p className="notice"><strong>Qwen</strong> {review.note}</p> :
+    <p className="micro muted">{reviewStatus[review.status]}</p>;
+}
+
 export function InvestigationWorkspace({ workspace }: { workspace: OpsWorkspace }) {
   return <section className="investigation-workspace" aria-labelledby="investigation-workspace-title">
     <h3 id="investigation-workspace-title">Bàn điều tra đa tác nhân</h3>
     <p className="muted">Supervisor cấp quyền đọc bằng chứng và soạn bản nháp. Chuyên viên duyệt cảnh báo.</p>
+    <ReviewNote review={workspace.supervisor_review} />
     <details className="details" open>
       <summary>Investigation · Bản đồ chiến dịch</summary>
+      <ReviewNote review={workspace.investigation.review} />
       <CampaignGraph graph={workspace.investigation} />
       {workspace.investigation.related_campaigns.length > 0 && <ul className="question-list">
         {workspace.investigation.related_campaigns.map(item => <li key={item.id}>
@@ -62,11 +82,13 @@ export function InvestigationWorkspace({ workspace }: { workspace: OpsWorkspace 
     </details>
     <details className="details">
       <summary>Detection · Tín hiệu rủi ro</summary>
+      <ReviewNote review={workspace.detection.review} />
       <p>{riskLabels[workspace.detection.risk]}</p>
       <ul className="question-list">{workspace.detection.signals.map(signal => <li key={signal}>{signal}</li>)}</ul>
     </details>
     <details className="details">
       <summary>Threat Intel · Chiến dịch đã xác minh</summary>
+      <ReviewNote review={workspace.threat_intel.review} />
       {workspace.threat_intel.confirmed_related_campaigns.length ? <ul className="question-list">
         {workspace.threat_intel.confirmed_related_campaigns.map(id => <li key={id}>
           <Link href={`/ops/${id}`}>{id.slice(0, 8).toUpperCase()}</Link>
@@ -76,6 +98,7 @@ export function InvestigationWorkspace({ workspace }: { workspace: OpsWorkspace 
     </details>
     <details className="details">
       <summary>Forensics · Ảnh và ghi âm</summary>
+      <ReviewNote review={workspace.forensics.review} />
       <p>{Object.entries(workspace.forensics.reviewed_input_counts).map(([kind, count]) => `${count} ${mediaLabels[kind]}`).join(" · ")
         || "Chưa có tệp ảnh hoặc ghi âm trong các báo cáo của chiến dịch."}</p>
       {workspace.forensics.reviewed_input_counts.receipt > 0 && <p>
@@ -84,10 +107,12 @@ export function InvestigationWorkspace({ workspace }: { workspace: OpsWorkspace 
     </details>
     <details className="details">
       <summary>Protection · Đề xuất bảo vệ người dùng</summary>
+      <ReviewNote review={workspace.protection.review} />
       <ul className="question-list">{workspace.protection.recommendations.map(item => <li key={item}>{item}</li>)}</ul>
     </details>
     <details className="details">
       <summary>Report · Bản nháp chờ duyệt</summary>
+      <ReviewNote review={workspace.report.review} />
       <h4>{workspace.report.title}</h4><p>{workspace.report.summary}</p><p>{workspace.report.recommendation}</p>
     </details>
   </section>;

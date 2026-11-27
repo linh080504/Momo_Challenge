@@ -24,8 +24,8 @@ npm.cmd run dev --prefix apps/web
 - Web tại **http://localhost:3000**, API docs tại **http://localhost:8000/docs**, bàn vận hành tại **http://localhost:3000/ops**.
 - Hai tài khoản demo local có trong `.env` vừa tạo. Đăng nhập vai người dùng để báo cáo. Đăng nhập vai vận hành trong cửa sổ riêng để duyệt. Kiểm tra lại nội dung trùng số tài khoản, số điện thoại hoặc tên miền để thấy cảnh báo đã xác nhận.
 - Có thể dùng `docker compose up --build` sau khi tạo `.env`. Compose chạy API và web trên máy, lưu DB trong volume riêng.
-- Đặt `LLM_BASE_URL` (tới gốc API tương thích Chat Completions, thường kết thúc bằng `/v1`), `LLM_API_KEY`, `LLM_MODEL`, `LLM_FALLBACK_MODEL` và `SAFE_BROWSING_KEY` nếu có tài khoản dịch vụ. Chế độ hạn chế dùng luật và dữ liệu nội bộ. Google Safe Browsing chỉ đối chiếu tên miền gốc, với độ phủ giới hạn theo tên miền.
-- Đặt `DASHSCOPE_API_KEY` để dùng Qwen4-Max qua QwenCloud Singapore khi `LLM_BASE_URL` và `LLM_MODEL` để trống.
+- Đặt `DASHSCOPE_API_KEY` để gọi Qwen4-Max qua QwenCloud Singapore. Deep Path và bàn điều tra dùng chung giới hạn `LLM_CALLS_PER_DAY`. Chế độ hạn chế dùng luật và dữ liệu nội bộ.
+- Đặt `SAFE_BROWSING_KEY` nếu có tài khoản dịch vụ. Google Safe Browsing đối chiếu tên miền gốc, với độ phủ giới hạn theo tên miền.
 
 ### Kiến trúc PayPause AI sau nâng cấp
 

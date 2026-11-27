@@ -10,6 +10,7 @@ services:
     volumes:
       - staging-postgres:/var/lib/postgresql/data
       - ./infra/supabase/migrations/001_mvp.sql:/docker-entrypoint-initdb.d/001_mvp.sql:ro
+      - ./infra/supabase/migrations/002_sample_reviews.sql:/docker-entrypoint-initdb.d/002_sample_reviews.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U paypause_stage -d paypause_stage"]
       interval: 3s

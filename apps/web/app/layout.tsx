@@ -19,7 +19,7 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
         <main className="main-content">{children}</main>
         <footer className="site-footer"><div className="shell footer-inner">
           <span className="footer-brand"><BrandMascot size={22} />{projectName}</span>
-          <div className="footer-links"><Link href="/qr">VietQR</Link><Link href="/ops">Vận hành</Link><Link href="/login">Tài khoản</Link></div>
+          <div className="footer-links"><Link href="/website">Kiểm tra website</Link><Link href="/qr">VietQR</Link><Link href="/ops">Vận hành</Link><Link href="/login">Tài khoản</Link></div>
           <span>Hãy xác minh qua kênh chính thức trước khi chuyển tiền.</span>
         </div></footer>
       </body>

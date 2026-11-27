@@ -41,7 +41,7 @@ def main():
         path = OUT / (image_id + ".png")
         image.save(path)
         images.append({
-            **row, "id": image_id, "text": "", "tags": row["tags"] + ["image"],
+            **row, "id": image_id, "text": "", "transcript": text, "tags": row["tags"] + ["image"],
             "image": path.relative_to(ROOT).as_posix(), "source": "synthetic-rendered",
         })
     with (OUT / "dataset.smoke.jsonl").open("w", encoding="utf-8") as output:

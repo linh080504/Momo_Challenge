@@ -3,7 +3,7 @@ from collections import Counter
 from contextlib import contextmanager
 from uuid import uuid4
 
-from sqlalchemy import JSON, String, create_engine, delete, func, select, text, update
+from sqlalchemy import JSON, String, UniqueConstraint, create_engine, delete, func, select, text, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, aliased, mapped_column
 
 
@@ -56,6 +56,18 @@ class Login(Base):
     expires: Mapped[int] = mapped_column(index=True)
 
 
+class SampleReview(Base):
+    __tablename__ = "sample_reviews"
+    __table_args__ = (UniqueConstraint("report", "revision"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    report: Mapped[str] = mapped_column(String(64), index=True)
+    campaign: Mapped[str] = mapped_column(String(32))
+    actor: Mapped[str] = mapped_column(String(254))
+    label: Mapped[str] = mapped_column(String(16))
+    revision: Mapped[int] = mapped_column()
+    created: Mapped[int] = mapped_column(default=lambda: int(time.time()))
+
+
 LEVELS = {"low": 0, "uncertain": 1, "medium": 2, "high": 3}
 
 
@@ -76,6 +88,10 @@ class Store:
                 session.execute(text("SELECT pg_advisory_xact_lock(7042026)"))
             yield session
             session.commit()
+
+    def ready(self):
+        with self.engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
 
     def matches(self, digests):
         if not digests:
@@ -116,7 +132,11 @@ class Store:
             if candidates:
                 campaign = next((item for item in candidates if item.review_group), candidates[0])
                 campaign.revision += 1
-                merged = [item.id for item in candidates if item is not campaign and not item.review_group]
+                split_cases = set(session.scalars(select(Audit.campaign).where(
+                    Audit.campaign.in_([item.id for item in candidates]), Audit.action == "split_sample"
+                )))
+                merged = [item.id for item in candidates if item is not campaign and not item.review_group
+                          and item.id not in split_cases and campaign.id not in split_cases]
                 if merged:
                     session.execute(update(Report).where(Report.campaign.in_(merged)).values(campaign=campaign.id))
                     session.execute(delete(Entity).where(Entity.campaign.in_(merged)))
@@ -137,6 +157,8 @@ class Store:
     def delete_reports(self, reporter):
         with self.write() as session:
             ids = set(session.scalars(select(Report.campaign).where(Report.reporter == reporter)))
+            owned = select(Report.id).where(Report.reporter == reporter)
+            session.execute(delete(SampleReview).where(SampleReview.report.in_(owned)))
             removed = session.execute(delete(Report).where(Report.reporter == reporter)).rowcount
             for campaign_id in ids:
                 campaign = session.get(Campaign, campaign_id)
@@ -170,23 +192,112 @@ class Store:
             campaign = session.get(Campaign, campaign_id)
             return self.describe(session, campaign) if campaign else None
 
+    def overview(self):
+        since = int(time.time()) - 86400
+        with Session(self.engine) as session:
+            reports = session.scalar(select(func.count()).select_from(Report).where(Report.created >= since))
+            counts = dict(session.execute(select(Campaign.state, func.count())
+                                          .group_by(Campaign.state)).tuples().all())
+            decisions = session.scalar(select(func.count()).select_from(Audit).where(
+                Audit.created >= since, Audit.action.in_(("approve", "reject"))))
+            return {"reports_24h": reports, "decisions_24h": decisions,
+                    "pending": counts.get("pending", 0), "approved": counts.get("approved", 0)}
+
+    def campaign_samples(self, campaign_id, after=""):
+        with Session(self.engine) as session:
+            if session.get(Campaign, campaign_id) is None:
+                return None
+            reports = list(session.scalars(select(Report).where(Report.campaign == campaign_id, Report.id > after)
+                                           .order_by(Report.id).limit(51)))
+            ids = [report.id for report in reports[:50]]
+            reviews = {}
+            query = (select(SampleReview).where(SampleReview.report.in_(ids))
+                     .order_by(SampleReview.id))
+            for row in session.scalars(query):
+                reviews.setdefault(row.report, []).append({"label": row.label, "revision": row.revision,
+                                                           "created": row.created, "actor": row.actor})
+            return {"samples": [{"id": report.id, "created": report.created,
+                                 **{key: report.snapshot.get(key) for key in ("risk", "group", "signals", "inputs")},
+                                 "history": reviews.get(report.id, [])}
+                                for report in reports[:50]],
+                    "next_cursor": ids[-1] if len(reports) > 50 else None}
+
+    def label_sample(self, campaign_id, report_id, actor, label, revision):
+        with self.write() as session:
+            report = session.get(Report, report_id)
+            if report is None or report.campaign != campaign_id:
+                return None
+            latest = session.scalar(select(SampleReview).where(SampleReview.report == report_id)
+                                    .order_by(SampleReview.id.desc()).limit(1))
+            if revision != (latest.revision if latest else 0):
+                return None
+            item = SampleReview(report=report_id, campaign=campaign_id, actor=actor,
+                                label=label, revision=revision + 1)
+            session.add(item)
+            session.flush()
+            return {"label": item.label, "revision": item.revision, "actor": item.actor, "created": item.created}
+
+    def split_sample(self, campaign_id, report_id, actor, revision):
+        with self.write() as session:
+            original = session.get(Campaign, campaign_id)
+            report = session.get(Report, report_id)
+            if (original is None or original.state != "pending" or original.revision != revision
+                    or report is None or report.campaign != campaign_id):
+                return None
+            remaining = list(session.scalars(select(Report.snapshot).where(
+                Report.campaign == campaign_id, Report.id != report_id)))
+            if not remaining:
+                return None
+            split = Campaign(group=report.snapshot["group"], risk=report.snapshot["risk"], signals=[])
+            session.add(split)
+            session.flush()
+            report.campaign = split.id
+            original.revision += 1
+            self.rebuild(session, original, remaining)
+            self.rebuild(session, split, [report.snapshot])
+            session.add_all(Audit(campaign=case, actor=actor, action="split_sample") for case in (campaign_id, split.id))
+            return {"campaign_id": split.id, "previous_revision": original.revision}
+
+    def reviewed_sample_export(self, after=""):
+        with Session(self.engine) as session:
+            current = aliased(SampleReview)
+            latest_id = (select(func.max(current.id)).where(current.report == Report.id)
+                         .correlate(Report).scalar_subquery())
+            query = (select(Report, SampleReview).join(SampleReview, SampleReview.id == latest_id)
+                     .where(Report.id > after, SampleReview.label.in_(("scam", "legit")))
+                     .order_by(Report.id).limit(501))
+            rows = session.execute(query).all()
+            return {
+                "schema_version": 1,
+                "purpose": "reviewed_signals",
+                "samples": [{"id": report.id, "group_id": report.campaign, "label": review.label,
+                             "label_revision": review.revision, "reviewed_at": review.created,
+                             "inputs": report.snapshot.get("inputs", []),
+                             "signals": report.snapshot.get("signals", [])}
+                            for report, review in rows[:500]],
+                "next_cursor": rows[499][0].id if len(rows) > 500 else None,
+            }
+
     def campaign_investigation(self, campaign_id):
         with Session(self.engine) as session:
             campaign = session.get(Campaign, campaign_id)
             if campaign is None:
                 return None
             detail = self.describe(session, campaign)
-            snapshots = session.scalars(select(Report.snapshot).where(Report.campaign == campaign_id)
-                                       .order_by(Report.id).limit(500))
+            snapshots = session.execute(select(Report.snapshot, Report.created).where(Report.campaign == campaign_id)
+                                        .order_by(Report.created.desc(), Report.id).limit(500))
             inputs = Counter()
             connections = Counter()
+            connection_times = {}
             forensics = Counter()
             sources = Counter()
-            for snapshot in snapshots:
+            for snapshot, created in snapshots:
                 modalities = set(snapshot.get("inputs", ()))
                 inputs.update(modalities)
                 kinds = set(snapshot["keys"].values())
-                connections.update((kind, modality) for kind in kinds for modality in modalities)
+                for edge in ((kind, modality) for kind in kinds for modality in modalities):
+                    connections[edge] += 1
+                    connection_times.setdefault(edge, created)
                 forensics.update(snapshot.get("forensics", {}))
                 sources.update(snapshot.get("sources", ()))
 
@@ -202,7 +313,8 @@ class Store:
             related = [{"id": row.id, "state": row.state, "shared_entities": row.shared}
                        for row in session.execute(query)]
             return detail, {"inputs": dict(inputs), "connections": connections, "related": related,
-                            "media_evidence": dict(forensics), "source_counts": dict(sources)}
+                            "connection_times": connection_times, "media_evidence": dict(forensics),
+                            "source_counts": dict(sources)}
 
     def verified_feedback(self):
         with Session(self.engine) as session:

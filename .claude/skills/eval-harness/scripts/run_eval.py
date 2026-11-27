@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Chạy bộ đánh giá (eval) cho analyzer của "Trước Khi Chuyển". Chỉ dùng thư viện chuẩn.
+"""Chạy bộ đánh giá (eval) cho analyzer của "Trước Khi Chuyển".
 
 Dữ liệu: JSONL, mỗi dòng một mẫu:
   {"id": "s001", "text": "...", "label": "scam"|"legit", "group": "G1".."G5"|null,
@@ -16,6 +16,7 @@ nên độ trễ chỉ gồm thời gian gọi API.
 Chế độ chạy:
   --baseline                 bộ lọc từ khóa (mốc "không có AI"). Mẫu ảnh = "không đọc được" → risk_level low
   --endpoint URL             gọi API thật, nhận JSON theo analysis.schema.json
+  --offline-api              chạy API trong tiến trình với SQLite tạm, tắt dịch vụ tra cứu và LLM
 
 Cổng chất lượng (exit code 1 nếu không đạt):
   --min-recall 0.90  --max-fpr 0.10  --max-p95-text 6  --max-p95-image 12
@@ -31,14 +32,17 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime as dt
+import hashlib
 import json
 import os
 import pathlib
 import re
 import statistics
 import sys
+import tempfile
 import time
 import urllib.request
+from contextlib import ExitStack
 
 POSITIVE_DEFAULT = {"high", "medium", "uncertain"}  # "chưa chắc" vẫn tính là cảnh báo (an toàn hơn)
 
@@ -123,10 +127,25 @@ def endpoint_predict(url: str, payload: dict, timeout: float, token: str | None 
     req = urllib.request.Request(url, data=json.dumps(payload).encode(),
                                  headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        result = json.load(r)
-        if not isinstance(result, dict) or result.get("risk_level") not in {"high", "medium", "uncertain", "low"}:
-            raise ValueError("API chưa trả risk_level hợp lệ")
-        return result
+        return json.load(r)
+
+
+def offline_client(stack: ExitStack, sample_count: int):
+    from fastapi.testclient import TestClient
+
+    repo = pathlib.Path(__file__).resolve().parents[4]
+    sys.path.insert(0, str(repo / "apps" / "api"))
+    from app.config import Settings
+    from app.main import create_app
+
+    directory = pathlib.Path(stack.enter_context(tempfile.TemporaryDirectory()))
+    settings = Settings(
+        _env_file=None, database_url=f"sqlite:///{(directory / 'eval.sqlite3').as_posix()}",
+        demo_user_email="", demo_user_password="", demo_ops_email="", demo_ops_password="",
+        analysis_per_minute=max(sample_count, 1), fraud_url_model_path="", safe_browsing_key="",
+        rdap_lookups_per_hour=0, dashscope_api_key="", llm_calls_per_day=0,
+    )
+    return stack.enter_context(TestClient(create_app(settings)))
 
 
 def pct(values: list[float], p: float) -> float:
@@ -158,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--baseline", action="store_true")
     mode.add_argument("--endpoint")
+    mode.add_argument("--offline-api", action="store_true")
     ap.add_argument("--tag", default="run")
     ap.add_argument("--out", default="eval/reports")
     ap.add_argument("--timeout", type=float, default=30.0)
@@ -175,35 +195,45 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("Biến môi trường token chưa được đặt")
 
     positive = {p.strip() for p in args.positive.split(",") if p.strip()}
-    rows = [json.loads(line) for line in pathlib.Path(args.data).read_text(encoding="utf-8").splitlines()
+    dataset = pathlib.Path(args.data).read_bytes()
+    rows = [json.loads(line) for line in dataset.decode("utf-8").splitlines()
             if line.strip()]
     results, errors = [], []
     latencies: dict[str, list[float]] = {kind: [] for kind in ("text", "image", "url", "qr", "audio", "receipt")}
 
-    for row in rows:
-        kind = input_type(row)
-        latency = None  # None = chưa gọi API (vd. lỗi đọc ảnh) → không đưa vào p95
-        try:
-            if args.baseline:
-                t0 = time.perf_counter()
-                pred = baseline_predict_row(row)
-                latency = time.perf_counter() - t0
-            else:
-                payload = build_payload(row)  # đọc + mã hóa ảnh trước, không tính vào độ trễ
-                t0 = time.perf_counter()
-                try:
-                    pred = endpoint_predict(args.endpoint, payload, args.timeout, token)
-                finally:
+    with ExitStack() as stack:
+        client = offline_client(stack, len(rows)) if args.offline_api else None
+        for row in rows:
+            kind = input_type(row)
+            latency = None  # None = chưa gọi API (vd. lỗi đọc ảnh) → không đưa vào p95
+            try:
+                if args.baseline:
+                    t0 = time.perf_counter()
+                    pred = baseline_predict_row(row)
                     latency = time.perf_counter() - t0
-        except Exception as exc:  # lỗi mạng/timeout/ảnh hỏng tính là lỗi, KHÔNG tính là "an toàn"
-            errors.append({"id": row.get("id"), "input_type": kind, "error": str(exc)[:200]})
-            pred = {"risk_level": "error", "scenario_group": None}
-        if latency is not None:
-            latencies[kind].append(latency)
-        flagged = pred.get("risk_level") in positive
-        results.append({"id": row.get("id"), "input_type": kind, "label": row["label"], "group": row.get("group"),
-                        "tags": row.get("tags", []), "pred": pred.get("risk_level"),
-                        "pred_group": pred.get("scenario_group"), "flagged": flagged})
+                else:
+                    payload = build_payload(row)  # đọc + mã hóa ảnh trước, không tính vào độ trễ
+                    t0 = time.perf_counter()
+                    try:
+                        if client is not None:
+                            pred = client.post("/v1/analyze", json=payload).raise_for_status().json()
+                        else:
+                            pred = endpoint_predict(args.endpoint, payload, args.timeout, token)
+                    finally:
+                        latency = time.perf_counter() - t0
+                    if not isinstance(pred, dict) or pred.get("risk_level") not in {"high", "medium", "uncertain", "low"}:
+                        raise ValueError("API chưa trả risk_level hợp lệ")
+            except Exception as exc:  # lỗi mạng/timeout/ảnh hỏng tính là lỗi, KHÔNG tính là "an toàn"
+                errors.append({"id": row.get("id"), "input_type": kind, "error": str(exc)[:200]})
+                pred = {"risk_level": "error", "scenario_group": None}
+            if latency is not None:
+                latencies[kind].append(latency)
+            flagged = pred.get("risk_level") in positive
+            results.append({"id": row.get("id"), "input_type": kind, "label": row["label"], "group": row.get("group"),
+                            "tags": row.get("tags", []), "pred": pred.get("risk_level"),
+                            "pred_group": pred.get("scenario_group"), "flagged": flagged,
+                            "analysis_path": pred.get("analysis_path"), "model": pred.get("model"),
+                            "prompt_version": pred.get("prompt_version"), "degraded": pred.get("degraded") is True})
 
     scams = [r for r in results if r["label"] == "scam"]
     legits = [r for r in results if r["label"] == "legit"]
@@ -224,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     n_image = sum(r["input_type"] == "image" for r in results)
 
     summary = {
-        "tag": args.tag, "mode": "baseline" if args.baseline else "endpoint",
+        "tag": args.tag, "mode": "baseline" if args.baseline else "offline-api" if args.offline_api else "endpoint",
         "time": dt.datetime.now().isoformat(timespec="seconds"), "n": len(results),
         "n_scam": len(scams), "n_legit": len(legits), "n_text": n_text, "n_image": n_image,
         "recall_scam": round(recall, 3), "false_positive_rate": round(fpr, 3), "precision": round(precision, 3),
@@ -233,6 +263,14 @@ def main(argv: list[str] | None = None) -> int:
         "latency_p50_s": round(statistics.median(all_latencies), 3) if all_latencies else 0,
         "p95_text": _p95_or_none(latencies["text"]), "p95_image": _p95_or_none(latencies["image"]),
         "synthetic_count": sum(row.get("synthetic") is True for row in rows),
+        "dataset_sha256": hashlib.sha256(dataset).hexdigest(),
+        "prompt_versions": sorted({row["prompt_version"] for row in results if row["prompt_version"]}),
+        "models": {name: sum(row["model"] == name for row in results)
+                   for name in sorted({row["model"] for row in results if row["model"]})},
+        "degraded_count": sum(row["degraded"] for row in results),
+        "uncertain_by_label": {label: sum(row["label"] == label and row["pred"] == "uncertain" for row in results)
+                               for label in ("scam", "legit")},
+        "analysis_paths": {path: sum(row["analysis_path"] == path for row in results) for path in ("fast", "deep")},
         "by_input": {kind: {"n": sum(row["input_type"] == kind for row in results),
                             "p95_s": _p95_or_none(measurements),
                             "errors": sum(row["input_type"] == kind for row in errors),
@@ -270,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
                                                   encoding="utf-8")
     summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
     (out / "last_run.json").write_text(summary_json, encoding="utf-8")
-    if summary["passed"] and not args.baseline:
+    if summary["passed"] and args.endpoint:
         (out / "latest.json").write_text(summary_json, encoding="utf-8")
 
     md = [f"# Eval `{args.tag}` — {summary['time']}", "",
@@ -285,12 +323,19 @@ def main(argv: list[str] | None = None) -> int:
           f"- Recall theo nhóm: {json.dumps(per_group, ensure_ascii=False)}",
           f"- Bỏ sót: {', '.join(summary['missed_scams']) or 'không'}",
           f"- Báo nhầm: {', '.join(summary['false_alarms']) or 'không'}"]
+    uncertain = summary["uncertain_by_label"]
+    md.append(f"- Chưa đủ bằng chứng: {uncertain['scam']} mẫu scam · {uncertain['legit']} mẫu hợp lệ")
+    paths = summary["analysis_paths"]
+    if any(paths.values()):
+        md.append(f"- Định tuyến: Fast {paths['fast']} · Deep {paths['deep']}")
     if any(summary["by_input"][kind]["n"] for kind in ("url", "qr", "audio", "receipt")):
         md.extend(f"- `{kind}`: {stats['n']} mẫu · p95 {_fmt_p95(stats['p95_s'], stats['n'])}"
                   f" · {stats['uncertain']} chưa đủ bằng chứng · {stats['errors']} lỗi"
                   for kind, stats in summary["by_input"].items() if stats["n"] and kind not in {"text", "image"})
     if args.baseline and n_image:
         md.append(f"- Lưu ý baseline: {n_image} mẫu ảnh tính là \"không đọc được\" (risk_level low).")
+    if args.offline_api:
+        md.append("- Cấu hình offline: API trong tiến trình, SQLite tạm, tắt LLM, RDAP và Safe Browsing.")
     if not n_image:
         md.append("- Lưu ý: không có mẫu ảnh trong tập này, cổng p95 ảnh không được đánh giá.")
     if not n_text:

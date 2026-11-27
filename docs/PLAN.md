@@ -159,7 +159,7 @@ Luồng mục tiêu đi từ **tin nhắn, hình ảnh, URL, QR, ghi âm và bi�
 | Tầng | Nền hiện có | Việc cần làm và tiêu chí nghiệm thu |
 |---|---|---|
 | **1. Deterministic Security & Trust Gateway** | Kiểm tra định dạng, giới hạn dữ liệu, IDN/Punycode, ký tự tương tự, tên miền thương hiệu, QR liên kết và CRC VietQR. Đối chiếu thực thể HMAC với chiến dịch đã duyệt. Có Safe Browsing và RDAP `.com`/`.net` theo cấu hình. | Rà danh mục tên miền chính thức, mở rộng độ phủ typosquatting, RDAP và nguồn threat intelligence đã được cấp quyền. Kiểm tra quyền truy cập, mã hóa dữ liệu lưu trữ, giới hạn egress và giám sát. Kiểm thử cổng ứng dụng với dữ liệu nhập bất thường và nội dung chèn chỉ dẫn, xác nhận nhà cung cấp chỉ nhận dữ liệu đã định tuyến và đích kết nối luôn là dịch vụ được cấu hình. |
-| **2. Specialized Fine-tuned AI Models** | Có pipeline huấn luyện FraudURL bằng LightGBM, manifest và nạp artifact tùy cấu hình. | **FraudBERT-VN** dùng PhoBERT đa nhiệm với ba đầu ra nhãn lừa đảo, thủ đoạn và vùng bằng chứng, rồi so sánh ONNX INT8 với bản gốc. **FraudURL-ML** so sánh LightGBM và XGBoost trên holdout tách tên miền. **FraudDoc-VN** đánh giá DTD/DocTamper, OpenCV và OCR. **FraudVoice-VN** benchmark AASIST/XLS-R trên tiếng Việt. **FraudFusion-ML** học từ các nhóm tín hiệu và đánh giá xác suất đã hiệu chuẩn. Mỗi ứng viên có phiên bản, dữ liệu được phép dùng và kết quả holdout. |
+| **2. Specialized Fine-tuned AI Models** | Đã so sánh FraudURL LightGBM và XGBoost trên tập UCI. Giữ kết quả làm benchmark tham chiếu. | **FraudBERT-VN** dùng PhoBERT đa nhiệm với ba đầu ra nhãn lừa đảo, thủ đoạn và vùng bằng chứng, rồi so sánh ONNX INT8 với bản gốc. **FraudDoc-VN** đánh giá DTD/DocTamper, OpenCV và OCR. **FraudVoice-VN** benchmark AASIST/XLS-R trên tiếng Việt. **FraudFusion-ML** học từ các nhóm tín hiệu và đánh giá xác suất đã hiệu chuẩn. Mỗi ứng viên có phiên bản, dữ liệu được phép dùng và kết quả holdout. URL trong MVP dùng cổng bảo mật và nguồn bằng chứng ở tầng 1. |
 | **3. Deep Multimodal Reasoning** | Có Fast Path theo luật và bằng chứng đã xác minh. Deep Path dùng Qwen4-Max, OCR hiện tại và tri thức truy xuất theo nhóm thủ đoạn. Nhánh ghi âm đã có adapter Whisper cục bộ. | Benchmark PP-OCRv5, PP-OCRv6 và PaddleOCR-VL trên ảnh tiếng Việt. Đánh giá Whisper `large-v3-turbo` trên giọng vùng miền và bản ghi nhiễu. Thử Qwen3-VL-8B và Gemini 2.5 Flash theo quyền sử dụng dữ liệu. Huấn luyện ứng viên FraudLLM Qwen3-8B + QLoRA, xây Vietnam Scam RAG với BGE-M3 và BGE-reranker-v2-m3. Mở rộng router theo loại dữ liệu, độ phức tạp và độ tin cậy. Đo chất lượng, chi phí, tỷ lệ gọi Deep Path và p95 theo từng loại đầu vào. |
 | **4. Graph Intelligence & Adaptive Risk** | Có nhóm chiến dịch theo thực thể ẩn danh, đồ thị cùng báo cáo và liên kết giữa chiến dịch. Điểm hiện tại dùng luật, bằng chứng và kết quả model khả dụng. | Thêm liên kết ảnh tương tự, mẫu nội dung, QR và người nhận có căn cứ truy xuất. Lưu nguồn, thời điểm và độ tin cậy của cạnh. Đo tỷ lệ gộp nhầm và tách nhầm chiến dịch. Kết hợp bằng chứng độc lập, giảm trùng tín hiệu và kiểm tra hiệu chuẩn với FraudFusion. |
 | **5. Human-Centered Action & Fraud Ops** | Có khuyến nghị tạm dừng, đối chiếu người nhận, LangGraph trong `/ops`, bản nháp và cảnh báo web sau duyệt. | Nâng hàng đợi điều tra, bổ sung thời gian xử lý và xu hướng 24 giờ, định nghĩa kịch bản review và quyền theo vai trò. Thử cảnh báo in-app, email/SMS và nội bộ sau khi có quyền, nhật ký và cơ chế chống gửi trùng. Đối chiếu giao dịch chỉ khi có nguồn thanh toán được cấp quyền. |
@@ -182,7 +182,7 @@ Human Approval Gateway kiểm tra vai trò chuyên viên, phiên bản hồ sơ 
 ### Thứ tự triển khai
 
 1. **Chốt baseline và dữ liệu.** Chuẩn bị mẫu tiếng Việt đã ẩn danh và được phép sử dụng, khóa holdout, đo baseline local và staging theo loại đầu vào.
-2. **Bật các thành phần đã có.** Đánh giá FraudURL trước khi nạp, chạy Whisper thật, kiểm thử nguồn tra cứu, OCR biên lai và fallback. Ghi lại cấu hình, số đo, lỗi và hạn mức.
+2. **Kiểm thử các thành phần đã có.** Chạy Whisper thật, kiểm thử cổng URL, OCR biên lai và fallback. Ghi lại cấu hình, số đo, lỗi và hạn mức.
 3. **Benchmark và thử mô hình ứng viên.** Xây tập nhãn theo tác vụ, chạy so sánh mô hình chuyên biệt, OCR/VLM, FraudLLM và RAG ở môi trường thử. Giữ bộ luật và bằng chứng xác minh làm nền khi phụ thuộc ngoài gián đoạn.
 4. **Kiểm chứng vận hành và phát hành.** Đo quy trình có chuyên viên, kiểm thử quyền và việc phát cảnh báo sau duyệt. Mở kênh tích hợp khi có quyền và có thể quay lui. Đo lại sau mỗi thay đổi model hoặc nguồn dữ liệu.
 
@@ -229,7 +229,7 @@ Bắt đầu từ bản PayPause AI đã chạy local. Mỗi bước có gói b�
 
 #### Bước 6. Huấn luyện và đánh giá mô hình chuyên biệt
 
-- **Làm:** Dùng LightGBM làm ứng viên FraudURL đầu tiên và so sánh XGBoost. Tạo FraudBERT-VN đa nhiệm, đo trước và sau khi xuất ONNX INT8. Thử DTD/DocTamper kết hợp OCR/OpenCV cho FraudDoc-VN, AASIST/XLS-R cho FraudVoice-VN. Dùng cùng split khi so sánh phiên bản của một tác vụ.
+- **Làm:** Tạo FraudBERT-VN đa nhiệm, đo trước và sau khi xuất ONNX INT8. Thử DTD/DocTamper kết hợp OCR/OpenCV cho FraudDoc-VN, AASIST/XLS-R cho FraudVoice-VN. Dùng cùng split khi so sánh phiên bản của một tác vụ. Benchmark FraudURL đã lưu để tham chiếu. Đánh giá chất lượng kiểm tra URL của MVP theo U-04.
 - **Bàn giao:** Dataset phiên bản, model artifact và manifest có checksum, kết quả holdout, tài nguyên chạy và tiêu chí kích hoạt cho từng ứng viên.
 - **Qua bước khi:** Mỗi ứng viên có đánh giá recall, báo nhầm và độ trễ theo tác vụ. Chọn artifact theo tiêu chí đã chốt hoặc ghi lý do giữ bộ phân tích hiện tại. FraudFusion được đánh giá ở bước 9 khi các nguồn tín hiệu đã sẵn sàng.
 
@@ -298,6 +298,8 @@ Bắt đầu từ bản PayPause AI đã chạy local. Mỗi bước có gói b�
 | Nội dung bàn giao | Bộ ca demo, hướng dẫn cấu hình, tài liệu vai user/ops, báo cáo chất lượng, lịch cập nhật tri thức, hướng dẫn ứng phó và quay lui. | PM + BE. Người mới thực hiện được luồng demo và tìm được người phụ trách từng dịch vụ. |
 
 [Ánh xạ bước với người phụ trách và thư mục](TASKS.md#ánh-xạ-các-bước-vào-repo)
+
+[Bàn giao MVP và điều kiện nghiệm thu từng bước](MVP_HANDOFF.md)
 
 ---
 
