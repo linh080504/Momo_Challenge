@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, ClipboardList, Globe2, LoaderCircle, ScanEye, Search, Sparkles } from "lucide-react";
 import { analyze, ApiError, currentSession, entityLabels, saveSession, type Analysis, type AnalysisEvent, type Input, type Session } from "@/lib/api";
 import { audioInput } from "@/lib/audio";
+import { type AnalyzerDraft, type AnalyzerKind } from "@/lib/check-draft";
 import { imageInput, receiptInput } from "@/lib/images";
 import { Result } from "./result";
 import { Upload } from "./upload";
@@ -12,11 +13,18 @@ import { WebsiteSnapshot } from "./website-snapshot";
 
 const SAMPLE = "Tôi là cán bộ công an. Hãy chuyển ngay vào tài khoản tạm giữ để xác minh, không được nói với ai.";
 
-export function AnalyzerForm({ website = false }: { website?: boolean }) {
-  const [text, setText] = useState("");
-  const [markup, setMarkup] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<"image" | "receipt" | "audio">("image");
+export function AnalyzerForm({ kind = "website", compact = false, initialDraft, onCheck }: {
+  kind?: AnalyzerKind;
+  compact?: boolean;
+  initialDraft?: AnalyzerDraft;
+  onCheck?: (draft: AnalyzerDraft) => void;
+}) {
+  const website = kind === "website";
+  const mediaMode = kind === "image" || kind === "receipt" || kind === "audio" ? kind : null;
+  const headingId = useId();
+  const [text, setText] = useState(initialDraft?.text ?? "");
+  const [markup, setMarkup] = useState(initialDraft?.markup ?? "");
+  const [file, setFile] = useState<File | null>(initialDraft?.file ?? null);
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
   const [capture, setCapture] = useState<AnalysisEvent["website_capture"]>();
   const [busy, setBusy] = useState(false);
@@ -27,11 +35,18 @@ export function AnalyzerForm({ website = false }: { website?: boolean }) {
   const [session, setSession] = useState<Session | null>(null);
   const active = useRef<AbortController | null>(null);
   const lastWebsiteInput = useRef<Input | null>(null);
+  const formElement = useRef<HTMLFormElement>(null);
   const resultElement = useRef<HTMLDivElement>(null);
   const captureElement = useRef<HTMLElement>(null);
   const capturePicture = capture ? `data:image/jpeg;base64,${capture.jpeg}` : undefined;
+  const canSubmit = mediaMode ? Boolean(file) : Boolean(text.trim());
 
   useEffect(() => () => active.current?.abort(), []);
+  useEffect(() => {
+    if (!initialDraft) return;
+    const timer = window.setTimeout(() => formElement.current?.requestSubmit(), 0);
+    return () => window.clearTimeout(timer);
+  }, [initialDraft]);
   useEffect(() => { if (result) resultElement.current?.scrollIntoView({ behavior: "smooth", block: website ? "start" : "nearest" }); }, [result, website]);
   useEffect(() => { if (busy && capturePicture) captureElement.current?.scrollIntoView({ block: "start" }); }, [busy, capturePicture]);
 
@@ -41,7 +56,7 @@ export function AnalyzerForm({ website = false }: { website?: boolean }) {
   }
 
   async function runAnalysis(savedInput?: Input) {
-    if (active.current || (!savedInput && !(text.trim() || (!website && file)))) return;
+    if (active.current || (!savedInput && !canSubmit)) return;
     setBusy(true);
     setError("");
     setEvents([]);
@@ -49,15 +64,15 @@ export function AnalyzerForm({ website = false }: { website?: boolean }) {
     if (!savedInput) setResult(null);
     const controller = new AbortController();
     active.current = controller;
-    const timeout = window.setTimeout(() => controller.abort("timeout"), website ? 45000 : mode === "audio" ? 35000 : 20000);
+    const timeout = window.setTimeout(() => controller.abort("timeout"), website ? 45000 : kind === "audio" ? 35000 : 20000);
     try {
       let input = savedInput;
       if (!input) {
         input = website ? { url: text.trim(), text: "", website_preview: true } : { text: text.trim() };
         if (website && markup.trim()) input.website_html = markup.trim();
-        if (file && mode === "audio") {
+        if (file && kind === "audio") {
           input.audio_base64 = await audioInput(file);
-        } else if (file && mode === "receipt") {
+        } else if (file && kind === "receipt") {
           input.image_kind = "receipt";
           input.image_mime = file.type;
           input.image_base64 = await receiptInput(file);
@@ -77,7 +92,7 @@ export function AnalyzerForm({ website = false }: { website?: boolean }) {
       }
       setSession(signedIn);
       if (!savedInput) {
-        setReceipt(mode === "receipt" ? file : null);
+        setReceipt(kind === "receipt" ? file : null);
         setWebsiteImage(website ? file : null);
       }
       if (website) lastWebsiteInput.current = input;
@@ -95,6 +110,11 @@ export function AnalyzerForm({ website = false }: { website?: boolean }) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!canSubmit) return;
+    if (onCheck) {
+      onCheck({ kind, text, markup, file });
+      return;
+    }
     void runAnalysis();
   }
 
@@ -102,68 +122,70 @@ export function AnalyzerForm({ website = false }: { website?: boolean }) {
     if (lastWebsiteInput.current) void runAnalysis(lastWebsiteInput.current);
   }
 
+  const websiteEvidence = website && <>
+    <details className="details" open={file ? true : undefined}>
+      <summary>Thêm bằng chứng từ ảnh hoặc tab</summary>
+      <Upload file={file} onChange={setFile} disabled={busy} />
+      <LiveTab disabled={busy} onCapture={setFile} />
+    </details>
+    <details className="details">
+      <summary>Thêm đoạn mã HTML có sẵn</summary>
+      <label>Mã nguồn HTML
+        <textarea value={markup} onChange={event => setMarkup(event.target.value)}
+          maxLength={35000} disabled={busy} spellCheck={false} aria-describedby="website-html-hint" />
+      </label>
+      <p id="website-html-hint" className="micro muted">Chỉ dán đoạn HTML đã bỏ thông tin cá nhân. Hệ thống chỉ đọc mã, không chạy trang.</p>
+    </details>
+  </>;
+
   return (
     <div className="form-column">
-      <section className="panel input-panel" aria-labelledby="checker-title">
-        <div className="panel-heading">
+      <section className="panel input-panel" aria-labelledby={compact ? undefined : headingId}>
+        {!compact && <div className="panel-heading">
           <span className="heading-icon">{website ? <Globe2 size={22} aria-hidden="true" /> : <ClipboardList size={22} aria-hidden="true" />}</span>
-          <h2 id="checker-title">{website ? "Địa chỉ website" : "Nội dung cần kiểm tra"}</h2>
-        </div>
-        <form onSubmit={submit} className="checker-form">
+          <h2 id={headingId}>{website ? "Địa chỉ website" : "Nội dung cần kiểm tra"}</h2>
+        </div>}
+        <form ref={formElement} onSubmit={submit} className={website
+          ? compact ? "checker-form compact-website-form" : "checker-form website-url-form"
+          : "checker-form"}>
           {website ? <>
             <label htmlFor="website-url">Link cần kiểm tra</label>
             <input id="website-url" type="text" inputMode="url" autoComplete="off" spellCheck={false} maxLength={2000}
               value={text} onChange={event => setText(event.target.value)} disabled={busy} required placeholder="https://example.com" />
-          </> : <>
+          </> : kind === "text" && <>
           <div className="input-caption">
-            <label htmlFor="input-text">Tin nhắn hoặc đường link</label>
-            <button type="button" className="sample-button" onClick={() => { setText(SAMPLE); setFile(null); }} disabled={busy}>
+            <label htmlFor="input-text">Tin nhắn cần kiểm tra</label>
+            <button type="button" className="sample-button" onClick={() => setText(SAMPLE)} disabled={busy}>
               <Sparkles size={16} aria-hidden="true" />Dùng mẫu
             </button>
           </div>
           <div className="text-field">
             <textarea id="input-text" value={text} maxLength={12000} disabled={busy}
               onChange={event => setText(event.target.value)}
-              onPaste={event => {
-                const image = Array.from(event.clipboardData.files)[0];
-                if (image?.type.startsWith("image/")) {
-                  event.preventDefault();
-                  if (mode === "audio") setMode("image");
-                  setFile(image);
-                }
-              }}
               placeholder="Dán nội dung bạn nhận được vào đây…" aria-describedby="input-count" />
             <span id="input-count" className="form-meta">{text.length.toLocaleString("vi-VN")} / 12.000</span>
           </div>
-          <label>Loại tệp đính kèm
-            <select value={mode} disabled={busy} onChange={event => {
-              setMode(event.target.value as typeof mode);
-              setFile(null);
-            }}>
-              <option value="image">Ảnh chụp tin nhắn</option>
-              <option value="receipt">Biên lai giao dịch</option>
-              <option value="audio">Ghi âm</option>
-            </select>
-          </label>
           </>}
-          {!website && <Upload file={file} onChange={setFile} disabled={busy} mode={mode} />}
-          {website && <details className="details" open={file ? true : undefined}>
-            <summary>Thêm bằng chứng từ ảnh hoặc tab</summary>
-            <Upload file={file} onChange={setFile} disabled={busy} mode={mode} />
-            <LiveTab disabled={busy} onCapture={setFile} />
-          </details>}
-          {website && <details className="details">
-            <summary>Thêm đoạn mã HTML có sẵn</summary>
-            <label htmlFor="website-html">Mã nguồn HTML</label>
-            <textarea id="website-html" value={markup} onChange={event => setMarkup(event.target.value)}
-              maxLength={35000} disabled={busy} spellCheck={false} aria-describedby="website-html-hint" />
-            <p id="website-html-hint" className="micro muted">Chỉ dán đoạn HTML đã bỏ thông tin cá nhân. Hệ thống chỉ đọc mã, không chạy trang.</p>
-          </details>}
+          {mediaMode && <>
+            <Upload file={file} onChange={setFile} disabled={busy} mode={mediaMode} />
+            <details className="details">
+              <summary>Thêm nội dung đi kèm</summary>
+              <label>Tin nhắn đi kèm (tùy chọn)
+                <textarea value={text} maxLength={12000} disabled={busy}
+                  onChange={event => setText(event.target.value)} rows={2} />
+              </label>
+            </details>
+          </>}
+          {!compact && websiteEvidence}
           {error && !result && <p role="alert" className="error">{error}</p>}
-          <button className="button primary check-button" disabled={busy || !(text.trim() || (!website && file))}>
+          <button className="button primary check-button" disabled={busy || !canSubmit}>
             {busy ? <LoaderCircle size={21} className="spinning" /> : <Search size={21} />}
             {busy ? "Đang kiểm tra…" : website ? "Phân tích website" : "Kiểm tra ngay"}
           </button>
+          {compact && websiteEvidence && <details className="details">
+            <summary>Bổ sung bằng chứng (tùy chọn)</summary>
+            {websiteEvidence}
+          </details>}
         </form>
         {busy && <div role="status" className="progress">
           {events.length === 0 && <p>{file ? "Đang đọc tệp đính kèm…" : "Đang tiếp nhận nội dung…"}</p>}

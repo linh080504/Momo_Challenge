@@ -7,9 +7,11 @@ export type UrlCheck = { host: string; level: "low" | "medium" | "high"; domain_
   domain_registered_on?: string | null; signals: string[]; official_brand?: string | null };
 export type WebsiteReport = {
   capture_scope?: "listed" | "unlisted";
+  reputation?: Partial<Record<"virustotal" | "urlhaus" | "phishtank",
+    { status: "match" | "clear" | "checked" | "unavailable"; scope: string }>>;
   public_page?: { status: "read" | "restricted" | "redirect" | "unsupported" | "unavailable" | "too_large" | "busy";
     model?: string | null; title?: string | null; capture_jpeg?: string | null; findings?: string[];
-    checked_at?: number; explanation?: { label: string; finding: string; support?: string; source_url?: string }[] };
+    checked_at?: number; explanation?: { label: string; finding: string; kind?: "article"; support?: string; source_url?: string }[] };
   sources: Record<"domain" | "community" | "approved_cases" | "safe_browsing" | "rdap", "match" | "clear" | "checked" | "unavailable">;
   source_limits?: Partial<Record<"safe_browsing" | "rdap", string>>;
   article?: { publisher: string; host: string; title: string; image_webp: string | null; capture_jpeg?: string | null; findings: string[];

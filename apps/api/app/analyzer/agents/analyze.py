@@ -3,6 +3,7 @@ import time
 from ...evidence.public_article import PUBLIC_ARTICLES, read_public_article
 from ...evidence.public_page import read_public_page
 from ...evidence.rdap import lookup_age
+from ...evidence.reputation import NAMES, check_reputation
 from ...evidence.url_gateway import checked_destination
 from ...evidence.website_report import build_report, credential_labels, markup_signals, screenshot_brands
 from ...evidence.website_explanation import public_explanation_options
@@ -99,6 +100,9 @@ class Analyzer:
         elif checked:
             add("safe_browsing", "Không có kết quả trùng ở cấp tên miền.", 0)
         explicit_website = bool(request.website_preview and request.url)
+        reputation = check_reputation(request.url, next(iter(domains.values())), self.settings, self.limits) if explicit_website and domains else {}
+        if matched_sources := [name for key, name in NAMES.items() if reputation.get(key, {}).get("status") == "match"]:
+            add("url_reputation", "Có tín hiệu trong " + ", ".join(matched_sources) + ". Xem phạm vi từng nguồn.", 60)
         if age := lookup_age(domains, self.limits, self.settings.rdap_lookups_per_hour, explicit_website=explicit_website):
             host, days, registered = age
             domains[host]["domain_age_days"] = days
@@ -132,11 +136,14 @@ class Analyzer:
                 article = read_public_article(target, self.settings, self.limits)
                 if article:
                     yield {"stage": "website_read", "message": "Đã đọc đề mục và cấu trúc bài viết"}
-            elif self.settings.website_public_html_enabled:
+            if self.settings.website_public_html_enabled:
                 message = ("Đang mở website và chụp ảnh" if self.settings.website_capture_enabled
                            else "Đang đọc nội dung công khai của trang")
                 yield {"stage": "website_read", "message": message}
-                public_page, public_facts = read_public_page(target, capture=self.settings.website_capture_enabled)
+                public_page, public_facts = read_public_page(
+                    target, capture=self.settings.website_capture_enabled and not (article and article.get("capture_jpeg")))
+                if public_page["status"] == "redirect":
+                    add("website_content", "Trang chuyển hướng ngoài phạm vi kiểm tra. Đích cuối chưa được xác minh.", 0)
                 if public_facts:
                     website_context = {"public_html": public_facts}
                     explanation_options = public_explanation_options(public_facts, next(iter(domains.values())),
@@ -164,7 +171,7 @@ class Analyzer:
             add("domain_check", "Địa chỉ trang chủ HTTPS khớp danh sách tên miền chính thức.", 0)
         if explanation_options:
             stage = {"stage": "website_ai", "message": "Qwen4-Max đang đánh giá bằng chứng từ website"}
-            if picture := public_page.get("capture_jpeg"):
+            if picture := public_page.get("capture_jpeg") or (article or {}).get("capture_jpeg"):
                 stage["website_capture"] = {"jpeg": picture, "host": next(iter(domains))}
             yield stage
         guidance = retrieve_guidance(matches, bool(worst_domain or found), text)
@@ -217,6 +224,8 @@ class Analyzer:
                 output["website_report"]["article"] = article
             if explicit_website:
                 output["website_report"]["capture_scope"] = "listed" if request.url.strip() in PUBLIC_ARTICLES else "unlisted"
+            if reputation:
+                output["website_report"]["reputation"] = reputation
             if public_page:
                 output["website_report"]["public_page"] = public_page
         if url_score is not None:

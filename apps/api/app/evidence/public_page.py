@@ -26,6 +26,13 @@ GAMBLING = re.compile(r"\b(?:casino|cá cược|đặt cược|sports betting|nh
 DEPOSIT = re.compile(r"\b(?:nạp tiền|nạp đầu|đặt cọc|tiền nạp|deposit|chuyển khoản)\b", re.I)
 INCENTIVE = re.compile(r"\b(?:thưởng đăng ký|thưởng nạp|hoàn trả|khuyến mãi|signup bonus|deposit bonus)\b", re.I)
 URGENCY = re.compile(r"\b(?:chuyển ngay|nộp ngay|thanh toán ngay|trong vòng \d+ phút|pay immediately)\b", re.I)
+OFFICIAL_CLAIM = re.compile(r"\b(?:link chính thức|trang(?: web)? chính thức|địa chỉ chính thức|official (?:site|website))\b", re.I)
+LICENSE_CLAIM = re.compile(r"\b(?:được cấp phép|giấy phép hoạt động|giấy phép kinh doanh|licensed by)\b", re.I)
+WITHDRAWAL = re.compile(r"\b(?:nạp\s*(?:[/&–-]|và)?\s*rút tiền|hướng dẫn rút tiền|how to withdraw)\b", re.I)
+ACCOUNT_REQUEST = re.compile(
+    r"\b(?:nhập|cung cấp|điền|gửi|enter|provide)\s+(?:lại\s+)?"
+    r"(?:mã\s+(?:otp|xác thực)|otp|mật khẩu|số thẻ|thông tin ngân hàng|password|card number)\b", re.I,
+)
 EDUCATION = re.compile(r"\b(?:phòng tránh|cách nhận biết|dấu hiệu nhận biết|how to spot|avoid scams?)\b", re.I)
 RESTRICTED_PREVIEW = re.compile(r"\b(?:pornography|porn videos?|nội dung người lớn|phim khiêu dâm)\b", re.I)
 TEXT_URL = re.compile(r"(?:https?://|www\.)\S+", re.I)
@@ -51,6 +58,7 @@ class PublicPageMarkup(PageMarkup):
         self.text = []
         self.text_size = 0
         self.articles = 0
+        self.article_depth = 0
         self.forms = 0
         self.description = ""
         self.paragraph = None
@@ -63,10 +71,11 @@ class PublicPageMarkup(PageMarkup):
             return
         if tag in self.labels and not self.labels[tag]:
             self.heading = tag
-        if tag == "p" and self.labels["h1"] and len(self.excerpts) < 8:
+        if tag == "p" and (self.labels["h1"] or self.article_depth) and len(self.excerpts) < 8:
             self.paragraph = ""
         if tag == "article":
             self.articles += 1
+            self.article_depth += 1
         if tag == "form":
             self.forms += 1
         if tag == "meta" and not self.description:
@@ -76,8 +85,12 @@ class PublicPageMarkup(PageMarkup):
         super().handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag):
-        if self.hidden and tag == self.hidden[-1]:
-            self.hidden.pop()
+        if self.hidden:
+            if tag == self.hidden[-1]:
+                self.hidden.pop()
+            return
+        if tag == "article" and self.article_depth:
+            self.article_depth -= 1
         if tag == self.heading:
             self.heading = None
         if tag == "p" and self.paragraph is not None:
@@ -116,22 +129,26 @@ def parse_public_page(html, url):
     sensitive_form = reader.password_field or reader.verification_field or reader.card_field
     facts = {
         "sensitive_form": sensitive_form, "external_form": reader.external_form,
+        "account_request": sensitive_form and bool(ACCOUNT_REQUEST.search(text)),
         "meta_redirect": reader.meta_refresh, "gambling_offer": gambling_offer,
         "payment_incentive": bool(INCENTIVE.search(text) and DEPOSIT.search(text) and not educational),
         "payment_pressure": bool(URGENCY.search(text) and not educational), "educational_heading": educational,
+        "official_claim": gambling_offer and bool(OFFICIAL_CLAIM.search(text)),
+        "license_claim": gambling_offer and bool(LICENSE_CLAIM.search(text)),
+        "withdrawal_instructions": gambling_offer and bool(WITHDRAWAL.search(text)),
         "article_markup": reader.articles > 0,
         "article_count": reader.articles,
         "form_count": reader.forms,
+        "homepage": urlsplit(url).path in {"", "/"} and reader.articles > 1,
     }
     findings = [message for key, message in (
-        ("sensitive_form", "HTML có trường yêu cầu mật khẩu, mã xác thực hoặc thông tin thẻ."),
-        ("external_form", "HTML khai báo biểu mẫu gửi dữ liệu sang tên miền khác."),
-        ("meta_redirect", "HTML khai báo chuyển hướng qua thẻ meta."),
+        ("sensitive_form", "Trang có ô yêu cầu mật khẩu, mã xác thực hoặc thông tin thẻ."),
+        ("external_form", "Biểu mẫu được cấu hình để gửi dữ liệu sang tên miền khác."),
+        ("meta_redirect", "Trang có khai báo tự chuyển sang địa chỉ khác."),
         ("gambling_offer", "Nội dung có dấu hiệu mời cá cược kèm nạp tiền."),
         ("payment_incentive", "Nội dung nhắc đến khuyến mãi hoặc tiền thưởng gắn với khoản nạp."),
         ("payment_pressure", "Nội dung có lời thúc giục thanh toán."),
         ("educational_heading", "Tiêu đề có dấu hiệu là nội dung hướng dẫn nhận biết hoặc phòng tránh."),
-        ("article_markup", "HTML có cấu trúc bài viết."),
     ) if facts[key]]
     # Omit promotional headers and mask personal data in read-only preview headings.
     hide_preview = bool(gambling_offer or (GAMBLING.search(heading) and not educational) or RESTRICTED_PREVIEW.search(heading))
@@ -174,7 +191,8 @@ async def _resolve(client, host):
 async def _pinned_get(client, scheme, host, address, path, accept):
     authority = f"[{address}]" if ":" in address else address
     pinned = urlunsplit((scheme, authority, path, "", ""))
-    request = httpx.Request("GET", pinned, headers={"Host": host, "Accept": accept, "Accept-Encoding": "gzip, identity"},
+    request = httpx.Request("GET", pinned, headers={"Host": host, "Accept": accept,
+                                                   "Accept-Encoding": "gzip, identity", "User-Agent": "PayPause/0.1"},
                             extensions={"sni_hostname": host})
     response = await client.send(request, stream=True, follow_redirects=False)
     try:

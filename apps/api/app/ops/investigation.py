@@ -12,7 +12,8 @@ from .qwen_review import suggest
 INPUT_LABELS = {"text": "Nội dung tin nhắn", "image": "Ảnh", "receipt": "Biên lai",
                 "qr": "QR", "audio": "Ghi âm", "url": "Liên kết"}
 ENTITY_LABELS = {"URL": "Tên miền", "ACCOUNT": "Tài khoản đã ẩn danh", "PHONE": "Số điện thoại đã ẩn danh"}
-SOURCE_NAMES = ("internal_blacklist", "external_blacklist", "safe_browsing", "domain_check", "rdap", "rules", "vietqr", "document")
+SOURCE_NAMES = ("internal_blacklist", "external_blacklist", "safe_browsing", "url_reputation",
+                "domain_check", "rdap", "rules", "vietqr", "document")
 
 
 class WorkspaceContext(TypedDict):

@@ -1,5 +1,6 @@
-import { AlertTriangle, BadgeCheck, Clock3, KeyRound, Link2, LockKeyhole, ScanLine } from "lucide-react";
-import { AnalyzerForm } from "@/components/analysis/analyzer-form";
+import { Clock3, KeyRound, Link2, ScanLine } from "lucide-react";
+import Link from "next/link";
+import { HomeChecker } from "@/components/analysis/home-checker";
 import { BinaryHero } from "@/components/binary-hero";
 import { projectName } from "@/components/brand";
 import { LandingFeatures } from "@/components/landing-features";
@@ -42,9 +43,10 @@ export default function Home() {
             <h1 id="home-title">{projectName}</h1>
             <p>Kiểm tra tin nhắn, đường link và ảnh chụp đáng ngờ trước khi chuyển tiền.</p>
             <div className="landing-hero-actions">
-              <a href="#kiem-tra" className="button primary">Kiểm tra ngay</a>
+              <Link href="/website" className="button primary">Kiểm tra ngay</Link>
               <a href="#quy-trinh" className="button secondary">Cách hoạt động</a>
             </div>
+            <HomeChecker />
           </div>
           <PosterCarousel />
         </div>
@@ -95,21 +97,6 @@ export default function Home() {
         <LandingFeatures />
       </section>
 
-      <section className="landing-check" id="kiem-tra" aria-labelledby="check-heading">
-        <div className="shell landing-section landing-check-grid">
-          <div className="landing-check-copy">
-            <h2 id="check-heading">Kiểm tra nội dung</h2>
-            <p>Dán thông tin hoặc tải tệp để xem dấu hiệu rủi ro và cách kiểm chứng.</p>
-            <ul>
-              <li><LockKeyhole size={19} aria-hidden="true" />Che dữ liệu riêng tư không cần thiết trước khi tải ảnh.</li>
-              <li><BadgeCheck size={19} aria-hidden="true" />Dùng trích dẫn để đối chiếu với tin nhắn gốc.</li>
-              <li><AlertTriangle size={19} aria-hidden="true" />Xác minh qua kênh chính thức trước khi chuyển tiền.</li>
-            </ul>
-          </div>
-          <AnalyzerForm />
-        </div>
-      </section>
-
       <section className="shell landing-section landing-faq" id="hoi-dap" aria-labelledby="faq-heading">
         <h2 id="faq-heading">Hỏi đáp</h2>
         <div className="landing-questions">
@@ -125,7 +112,7 @@ export default function Home() {
       <div className="landing-end">
         <div className="shell">
           <p>Nhận được yêu cầu chuyển tiền đáng ngờ?</p>
-          <a href="#kiem-tra" className="button primary">Kiểm tra nội dung</a>
+          <Link href="/website" className="button primary">Kiểm tra nội dung</Link>
         </div>
       </div>
       <QuickChat />

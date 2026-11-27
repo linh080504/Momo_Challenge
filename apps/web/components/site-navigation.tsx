@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
-import { Globe2, LayoutGrid, Menu, ScanLine, Search, UserRound, X } from "lucide-react";
+import { Globe2, House, LayoutGrid, Menu, ScanLine, UserRound, X } from "lucide-react";
 import { BrandMascot, projectName } from "@/components/brand";
 
 const links = [
-  { href: "/", label: "Kiểm tra", icon: Search },
+  { href: "/", label: "Trang chủ", icon: House },
   { href: "/website", label: "Website", icon: Globe2 },
   { href: "/qr", label: "VietQR", icon: ScanLine },
   { href: "/ops", label: "Vận hành", icon: LayoutGrid },
@@ -51,7 +51,7 @@ function LandingNavigation() {
         {links.slice(1).map(link => <Link key={link.href} href={link.href} className={link.href === "/website" ? undefined : "landing-menu-utility"}
           onClick={() => setOpen(false)}>{link.label}</Link>)}
       </div>
-      <a className="button primary landing-nav-cta" href="#kiem-tra">Kiểm tra ngay</a>
+      <Link className="button primary landing-nav-cta" href="/website">Kiểm tra ngay</Link>
     </nav>
   );
 }

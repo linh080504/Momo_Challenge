@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     node_command: str = "node"
     dashscope_api_key: SecretStr = SecretStr("")
     safe_browsing_key: str = ""
+    virustotal_api_key: SecretStr = SecretStr("")
+    urlhaus_feed_path: str = ""
+    phishtank_feed_path: str = ""
     website_capture_enabled: bool = False
     website_public_html_enabled: bool = False
     rdap_lookups_per_hour: int = Field(0, ge=0, le=30)

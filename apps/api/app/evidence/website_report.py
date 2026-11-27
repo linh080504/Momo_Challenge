@@ -72,11 +72,11 @@ def markup_signals(html, url):
     except (AssertionError, ValueError):
         return {"status": "unreadable", "findings": []}
     signals = (
-        (parser.password_field, "HTML có trường nhập mật khẩu."),
-        (parser.verification_field, "HTML có trường nhập mã xác thực một lần."),
-        (parser.card_field, "HTML có trường nhập số thẻ hoặc mã bảo mật thẻ."),
-        (parser.external_form, "HTML khai báo gửi biểu mẫu sang một tên miền khác."),
-        (parser.meta_refresh, "HTML khai báo tự chuyển hướng bằng thẻ meta refresh."),
+        (parser.password_field, "Biểu mẫu có ô nhập mật khẩu."),
+        (parser.verification_field, "Biểu mẫu có ô nhập mã xác thực một lần."),
+        (parser.card_field, "Biểu mẫu có ô nhập số thẻ hoặc mã bảo mật thẻ."),
+        (parser.external_form, "Biểu mẫu được cấu hình để gửi dữ liệu sang tên miền khác."),
+        (parser.meta_refresh, "Trang có khai báo tự chuyển sang địa chỉ khác."),
     )
     return {"status": "checked", "findings": [finding for present, finding in signals if present]}
 

@@ -7,7 +7,7 @@ export function Upload({ file, onChange, disabled = false, mode = "image" }: {
   file: File | null;
   onChange: (file: File | null) => void;
   disabled?: boolean;
-  mode?: "image" | "receipt" | "audio";
+  mode?: "image" | "receipt" | "audio" | "qr";
 }) {
   const id = useId();
   const [dragging, setDragging] = useState(false);
@@ -26,9 +26,16 @@ export function Upload({ file, onChange, disabled = false, mode = "image" }: {
   }, [file]);
 
   const audio = mode === "audio";
-  const label = audio ? "Tải bản ghi âm" : mode === "receipt" ? "Tải ảnh biên lai gốc" : "Tải ảnh chụp";
+  const label = audio ? "Tải bản ghi âm" : mode === "receipt" ? "Tải ảnh biên lai gốc" :
+    mode === "qr" ? "Tải ảnh mã QR" : "Tải ảnh chụp";
   return (
     <div className={"upload" + (dragging ? " dragging" : "")}
+      onPaste={event => {
+        const image = Array.from(event.clipboardData.files).find(item => ["image/png", "image/jpeg"].includes(item.type));
+        if (audio || disabled || !image) return;
+        event.preventDefault();
+        onChange(image);
+      }}
       onDragOver={event => { event.preventDefault(); if (!disabled) setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={event => {

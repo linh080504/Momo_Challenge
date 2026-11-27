@@ -19,7 +19,8 @@ const sources: Record<string, string> = {
   document: "Phân tích biên lai",
   rdap: "Dữ liệu đăng ký tên miền",
   fraud_url_ml: "Mô hình nhận diện phishing",
-  website_content: "Nội dung HTML công khai",
+  website_content: "Nội dung công khai của trang",
+  url_reputation: "Đối chiếu danh sách nguy hiểm",
 };
 
 export function Result({ result, initialSession, receipt, websiteImage, websiteRefresh }: {

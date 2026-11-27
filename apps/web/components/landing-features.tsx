@@ -8,12 +8,12 @@ const collections = [
   {
     title: "Người dùng",
     features: [
-      { icon: Link2, title: "Tin nhắn và đường link", text: "Kiểm tra lời thúc giục, yêu cầu cung cấp mã hoặc tên miền có dấu hiệu bất thường.", href: "#kiem-tra", link: "Kiểm tra nội dung" },
-      { icon: Camera, title: "Ảnh chụp màn hình", text: "Đọc chữ từ ảnh đoạn chat hoặc thông báo bạn nhận được.", href: "#kiem-tra", link: "Tải ảnh để kiểm tra" },
-      { icon: ScanLine, title: "Mã QR", text: "Kiểm tra tên miền trong QR liên kết hoặc đối chiếu thông tin người nhận trong VietQR.", href: "/qr", link: "Mở kiểm tra QR" },
-      { icon: ReceiptText, title: "Biên lai giao dịch", text: "Xem vùng chữ và dấu hiệu nén trên ảnh, rồi đối chiếu với lịch sử giao dịch.", href: "#kiem-tra", link: "Kiểm tra biên lai" },
-      { icon: Mic, title: "Ghi âm", text: "Tìm dấu hiệu thúc giục hoặc yêu cầu chuyển tiền trong bản chép lời khi có Whisper.", href: "#kiem-tra", link: "Kiểm tra bản ghi" },
-      { icon: UsersRound, title: "Hỏi người thân", text: "Chia sẻ tóm tắt đã che thông tin qua đường dẫn có hiệu lực 24 giờ.", href: "#kiem-tra", link: "Tạo kết quả để chia sẻ" },
+      { icon: Link2, title: "Tin nhắn và đường link", text: "Kiểm tra lời thúc giục, yêu cầu cung cấp mã hoặc tên miền có dấu hiệu bất thường.", href: "/website#kiem-tra-text", link: "Kiểm tra nội dung" },
+      { icon: Camera, title: "Ảnh chụp màn hình", text: "Đọc chữ từ ảnh đoạn chat hoặc thông báo bạn nhận được.", href: "/website#kiem-tra-image", link: "Tải ảnh để kiểm tra" },
+      { icon: ScanLine, title: "Mã QR", text: "Kiểm tra tên miền trong QR liên kết hoặc đối chiếu thông tin người nhận trong VietQR.", href: "/website#kiem-tra-qr", link: "Mở kiểm tra QR" },
+      { icon: ReceiptText, title: "Biên lai giao dịch", text: "Xem vùng chữ và dấu hiệu nén trên ảnh, rồi đối chiếu với lịch sử giao dịch.", href: "/website#kiem-tra-receipt", link: "Kiểm tra biên lai" },
+      { icon: Mic, title: "Ghi âm", text: "Tìm dấu hiệu thúc giục hoặc yêu cầu chuyển tiền trong bản chép lời khi có Whisper.", href: "/website#kiem-tra-audio", link: "Kiểm tra bản ghi" },
+      { icon: UsersRound, title: "Hỏi người thân", text: "Chia sẻ tóm tắt đã che thông tin qua đường dẫn có hiệu lực 24 giờ.", href: "/website", link: "Tạo kết quả để chia sẻ" },
     ],
   },
   {
@@ -21,7 +21,7 @@ const collections = [
     features: [
       { icon: Inbox, title: "Bản đồ chiến dịch", text: "Xem các loại bằng chứng và thực thể ẩn danh trùng nhau trong báo cáo.", href: "/ops", link: "Mở bàn vận hành" },
       { icon: FileCheck, title: "Duyệt có nhật ký", text: "Chuyên viên kiểm tra, phân loại và quyết định trước khi cảnh báo xuất hiện cho người dùng.", href: "/ops", link: "Xem chiến dịch" },
-      { icon: UsersRound, title: "Cảnh báo đã xác nhận", text: "Dấu hiệu trùng với một chiến dịch đã duyệt có thể xuất hiện ở những lần kiểm tra sau.", href: "#kiem-tra", link: "Xem cách kiểm tra" },
+      { icon: UsersRound, title: "Cảnh báo đã xác nhận", text: "Dấu hiệu trùng với một chiến dịch đã duyệt có thể xuất hiện ở những lần kiểm tra sau.", href: "/website", link: "Mở trang kiểm tra" },
     ],
   },
 ] as const;
@@ -66,8 +66,7 @@ export function LandingFeatures() {
                 <span className="landing-card-icon"><Icon size={22} aria-hidden="true" /></span>
                 <h3>{title}</h3>
                 <p>{text}</p>
-                {href.startsWith("#") ? <a href={href} className="landing-card-link">{link}</a> :
-                  <Link href={href} className="landing-card-link">{link}</Link>}
+                <Link href={href} className="landing-card-link">{link}</Link>
               </article>
             ))}
           </div>

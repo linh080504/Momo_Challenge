@@ -299,3 +299,38 @@ Qwen có thể nhận tối đa tám đoạn nội dung công khai đã giới h
 - **Bước 2, 5, 7 và 14.** Staging PostgreSQL với Tesseract, Whisper base và Qwen xử lý 29 mẫu tổng hợp qua sáu đầu vào, 0 lỗi API. Recall 100%, FPR 16,7%, p95 văn bản 1,828 giây và p95 ảnh 1,720 giây. Hai ca hợp lệ `receipt-smoke` và `audio-smoke` trả `uncertain`. Cổng FPR chưa đạt.
 - **Bước 13–15.** Có lệnh ghi và kiểm tra manifest cùng checksum, API `/ready`, endpoint cấu hình dành cho ops, migration và tài liệu quay lui. Nghiệm thu với người dùng thật, holdout đa kênh, mô hình cần nhãn riêng, dịch vụ đối tác và phát hành từ xa vẫn cần bằng chứng xác nhận. [Bảng bàn giao 15 bước](MVP_HANDOFF.md)
 - **Kiểm thử tích hợp.** 188 kiểm thử đạt khi bật PostgreSQL. Bốn ca trình duyệt đạt, gồm gán nhãn báo cáo, duyệt, nhận cảnh báo và kiểm tra ảnh, biên lai, QR và website. Đã thử riêng tải WAV ở khổ 390 px vào API staging dùng Whisper. Manifest xác minh checksum thành công và từ chối dataset khác với báo cáo.
+
+### URL Security Agent
+
+Luồng **Website** điều phối phân tích tên miền bằng Public Suffix List và RapidFuzz, tra tuổi tên miền qua RDAP, đối chiếu độ tin cậy và đọc nội dung công khai. DNS phục vụ kiểm tra địa chỉ trước khi đọc trang. Qwen diễn giải tối đa ba ý từ bài gốc, chẳng hạn chủ đề, chi tiết và thông điệp. Phần đánh giá rủi ro hiển thị bằng chứng riêng cho biểu mẫu nhạy cảm, yêu cầu thanh toán, chuyển hướng và cảnh báo đã đối chiếu.
+
+```mermaid
+flowchart LR
+  Link["URL người dùng nhập"] --> Agent["URL Security Agent"]
+  Agent --> Reputation["Nguồn danh tiếng"]
+  Agent --> Domain["Tên miền và RDAP"]
+  Agent --> Content["Nội dung công khai"]
+  Reputation --> Risk["Điểm và bằng chứng rủi ro"]
+  Domain --> Risk
+  Content --> Risk
+  Content --> Qwen["Qwen diễn giải bài"]
+  Risk --> Report["Báo cáo PayPause"]
+  Qwen --> Report
+```
+
+| Nguồn | Cấu hình | Phạm vi |
+|---|---|---|
+| VirusTotal | `VIRUSTOTAL_API_KEY` | Báo cáo tên miền đăng ký. Ghi nhận tín hiệu khi ít nhất hai bộ dò phân loại độc hại. Chỉ gửi tên miền gốc. VirusTotal có thể đưa tên miền được tra vào bộ dữ liệu cộng đồng. [Tài liệu VirusTotal](https://docs.virustotal.com/reference/domain-info) |
+| Google Safe Browsing | `SAFE_BROWSING_KEY` | Đối chiếu ở cấp tên miền như hiện tại. |
+| URLhaus | `URLHAUS_FEED_PATH` | Danh sách URL thuần đã giải nén do đội cung cấp. Đối chiếu URL trong bản cục bộ. [Tài liệu URLhaus](https://urlhaus.abuse.ch/api/) |
+| PhishTank | `PHISHTANK_FEED_PATH` | Tệp `online-valid.csv` đã giải nén. Đối chiếu bản ghi đang hoạt động và đã được xác minh. [Tài liệu PhishTank](https://phishtank.org/developer_info.php) |
+
+Quy trình triển khai cần làm mới các bản dữ liệu cục bộ theo quy định của nguồn. Mỗi hàng trong báo cáo ghi phạm vi và trạng thái nguồn. Nguồn không khả dụng hiển thị **Chưa có kết quả**.
+
+### Phân tích trang chủ VnExpress
+
+Yêu cầu GET công khai có định danh `User-Agent: PayPause/0.1` để hỗ trợ máy chủ từ chối yêu cầu thiếu định danh. Bộ trích lấy đoạn giới thiệu bên trong thẻ bài viết khi trang không có H1. Qwen được thông báo khi đầu vào là trang chủ có nhiều tin để mô tả từng mục theo đúng ngữ cảnh.
+
+### Phân tích nội dung và căn cứ rủi ro
+
+Báo cáo ưu tiên chủ đề bài viết, chi tiết đáng chú ý và hành động mà trang yêu cầu. Các đoạn diễn giải của Qwen có phần mở rộng để xem trích đoạn làm căn cứ. Với trang quảng bá cá cược, Qwen chọn và sắp thứ tự các dấu hiệu đã phân loại, chẳng hạn lời mời nạp tiền, ưu đãi gắn với khoản nạp và tuyên bố tự nhận có giấy phép. Tuyên bố của trang được ghi là chưa xác minh. Tên miền, ngày đăng ký và kết quả đối chiếu nguồn được trình bày riêng với phạm vi của từng dữ kiện.

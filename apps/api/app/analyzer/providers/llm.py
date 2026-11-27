@@ -11,7 +11,7 @@ V0 = (ROOT / "prompts" / "analyzer_v0.md").read_text(encoding="utf-8")
 TAXONOMY = V0.split("TAXONOMY RÚT GỌN", 1)[1].split("YÊU CẦU ĐẦU RA", 1)[0]
 SCENARIOS = frozenset(re.findall(r"^  (G[1-5]\.\d+) ", TAXONOMY, re.M))
 RISK = {"high": 80, "medium": 50, "uncertain": 30, "low": 15}
-PROMPT_VERSION = "signals-v7"
+PROMPT_VERSION = "signals-v8"
 QWEN_MODEL = "qwen4-max"
 QWEN_RESPONSES_URL = "https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1/responses"
 INSTRUCTIONS = PROMPT.replace("{{taxonomy}}", TAXONOMY)
@@ -71,7 +71,7 @@ def _website_notes(content, public, options):
     used = set()
     paragraphs = content.get("content_analysis")
     if isinstance(paragraphs, list):
-        for part in paragraphs[:2]:
+        for part in paragraphs[:3]:
             if not isinstance(part, dict):
                 continue
             index, raw = part.get("excerpt_index"), part.get("text")
@@ -79,26 +79,37 @@ def _website_notes(content, public, options):
                 continue
             text = " ".join(raw.split())
             excerpt = excerpts[index]
-            if not 40 <= len(text) <= 380 or PUBLIC_LINK.search(text) or re.search(r"[0-9]", text):
+            if not 40 <= len(text) <= 380 or PUBLIC_LINK.search(text) or re.search(r"[0-9]|\bHTML\b", text, re.I):
                 continue
             used.add(index)
-            notes.append({"label": "Nội dung bài" if not notes else "Ngữ cảnh bài viết",
+            labels = ("Nội dung trang chủ", "Tin hoặc mục đáng chú ý", "Ngữ cảnh khác") if public.get("homepage") else (
+                "Nội dung bài", "Chi tiết đáng chú ý", "Thông điệp hoặc hành động",
+            )
+            label = labels[len(notes)]
+            notes.append({"label": label, "kind": "article",
                           "finding": pii_mask.mask_text(text)["masked"], "support": excerpt})
 
     purpose = content.get("page_purpose")
     title = public.get("public_title")
     if not notes and title and isinstance(purpose, str) and purpose in PAGE_PURPOSES:
-        notes.append({"label": "Nội dung chính",
+        notes.append({"label": "Nội dung chính", "kind": "article",
                       "finding": f"Qwen nhận diện nội dung {PAGE_PURPOSES[purpose]} trong trang “{title}”."})
 
     ids = content.get("reason_ids")
     selected = [item for item in ids if isinstance(item, str) and item in options] if isinstance(ids, list) else []
-    # A direct source match and missing checks remain visible even if the model omits them.
+    direct_content = ("gambling_offer", "payment_incentive", "payment_pressure")
+    content_keys = dict.fromkeys([*direct_content, *selected])
+    content_notes = [options[key] for key in content_keys if options.get(key, {}).get("kind") == "article"]
+    notes.extend(content_notes[:4 - len(notes)])
+
+    # Keep direct matches and risk signals visible even if the model omits them.
     primary = [key for key in ("alerts", "domain") if key in options and (key == "alerts" or options[key].get("source_url"))]
     show_gap = content.get("risk_level") == "uncertain" and "source_gap" in options
-    keys = dict.fromkeys([*primary, *selected, "domain", "form_absence"])
-    findings = [options[key] for key in keys if key in options and (key != "source_gap" or not show_gap)]
-    findings = findings[:6 - len(notes) - int(show_gap)]
+    critical = ("sensitive_form", "routing", "redirect", "account_request", "subdomain")
+    keys = dict.fromkeys([*primary, *critical, *selected, "domain", "form_absence"])
+    findings = [options[key] for key in keys if key in options and options[key].get("kind") != "article"
+                and (key != "source_gap" or not show_gap)]
+    findings = findings[:8 - len(notes) - int(show_gap)]
     if show_gap:
         findings.append(options["source_gap"])
     if not findings or len(findings) + len(notes) < 2:
@@ -125,7 +136,7 @@ def infer(matches, evidence, benign, settings, limits, guidance=(), website_cont
         facts["explanation_options"] = {key: item["finding"] for key, item in explanation_options.items()}
         instructions += "\n" + WEBSITE_EXPLANATION
     content, _ = query_qwen(settings, limits, instructions, facts, timeout=12.0 if explanation_options else 3.2,
-                            max_output_tokens=680 if explanation_options else 200)
+                            max_output_tokens=900 if explanation_options else 200)
     if isinstance(content, dict) and "scenario_id" in content:
         risk, scenario = content.get("risk_level"), content["scenario_id"]
         if isinstance(risk, str) and risk in RISK and (scenario is None or isinstance(scenario, str) and scenario in SCENARIOS):

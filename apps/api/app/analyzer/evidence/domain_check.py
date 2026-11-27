@@ -12,6 +12,8 @@ import json
 import urllib.parse
 import urllib.request
 
+from rapidfuzz.distance import Levenshtein
+
 # Danh sách trắng rút gọn — đội bổ sung và kiểm chứng từng mục (sau này chuyển sang DB, chuyên viên sửa được).
 OFFICIAL = {
     "vietcombank.com.vn": "Vietcombank", "vietinbank.vn": "VietinBank", "bidv.com.vn": "BIDV",
@@ -48,13 +50,7 @@ def registered_domain(host: str) -> str:
 
 
 def levenshtein(a: str, b: str) -> int:
-    prev = list(range(len(b) + 1))
-    for i, ca in enumerate(a, 1):
-        cur = [i]
-        for j, cb in enumerate(b, 1):
-            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
-        prev = cur
-    return prev[-1]
+    return Levenshtein.distance(a, b)
 
 
 def deglyph(s: str) -> str:

@@ -35,6 +35,7 @@ def test_reads_pinned_public_address_only(monkeypatch, ip, redirect, status, req
             assert request.url.params["name"] == "example.com"
             return httpx.Response(200, json={"Answer": [{"type": 1, "data": ip}]})
         assert request.url.host == ip and request.headers["host"] == "example.com"
+        assert request.headers["user-agent"] == "PayPause/0.1"
         assert request.url.query == b"" and request.extensions["sni_hostname"] == "example.com"
         if redirect:
             return httpx.Response(302, headers={"location": redirect})
@@ -84,12 +85,41 @@ def test_recording_loads_publisher_styles_and_fonts_through_public_gateway(monke
     assert assets[font] == ("font", "font/woff2", b"wOF2data")
 
 
-def test_analyzes_page_signals_without_republishing_promotion():
-    html = """<h1>Casino XYZ</h1><p>Nạp tiền để tham gia cá cược.</p>
+def test_qwen_explains_classified_signals_without_republishing_promotion(monkeypatch):
+    html = """<h1>Casino XYZ</h1><p>Nạp tiền để tham gia cá cược và nhận thưởng nạp.</p>
+    <p>Đây là trang chính thức đã được cấp phép. Xem hướng dẫn nạp/rút tiền.</p>
     <script>document.write('chuyển ngay để nhận thưởng')</script>"""
-    facts, findings, title = public_page.parse_public_page(html, "https://example.com")
+    facts, findings, title = public_page.parse_public_page(html, "https://offers.example.com")
     assert facts["gambling_offer"] and not facts["payment_pressure"]
     assert title is None and "XYZ" not in " ".join(findings)
+    domain = {"host": "offers.example.com", "registered_domain": "example.com", "score": 0, "official_brand": None}
+    options = public_explanation_options(facts, domain, sources_checked=False)
+
+    def reply(_instructions, payload_json, _key, _timeout, _max_output_tokens):
+        assert "XYZ" not in payload_json and "public_excerpts" not in payload_json
+        return json.dumps({"risk_level": "medium", "scenario_id": None,
+                           "reason_ids": ["operator_claim", "withdrawal", "unverified_license", "subdomain"]})
+
+    monkeypatch.setattr(llm, "_qwen_output", reply)
+    _, _, _, explanation = llm.infer([], [], False, Settings(dashscope_api_key="test", llm_calls_per_day=1),
+                                     Limits(), website_context={"public_html": facts}, explanation_options=options)
+
+    assert explanation[:4] == [options[key] for key in ("gambling_offer", "payment_incentive", "operator_claim", "withdrawal")]
+    assert explanation[4] == options["subdomain"]
+    assert "HTML" not in str(explanation)
+
+
+def test_news_homepage_extracts_article_teasers_without_heading():
+    teaser = "The local paper published an article about libraries extending their opening hours."
+    other = "The paper also published an article about the team organizing a neighborhood cleanup."
+    html = (f"<title>Local paper</title><script>let html = '<article><p>{teaser}</p></article>';</script>"
+            f"<article><p>{teaser}</p></article><article><p>{other}</p></article>"
+            "<p>Subscribe to receive updates about all our stories and other notices from the company.</p>")
+    facts, _, title = public_page.parse_public_page(html, "https://example.org/")
+    assert title == "Local paper"
+    assert facts["homepage"] is True
+    assert facts["article_count"] == 2
+    assert facts["public_excerpts"] == [teaser, other]
 
 
 @pytest.mark.parametrize("fenced", [False, True])
