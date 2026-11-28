@@ -44,6 +44,8 @@ Preview cục bộ có thể bật `WEBSITE_CAPTURE_ENABLED=true` cho API sau kh
 
 Đặt `WEBSITE_PUBLIC_HTML_ENABLED=true` để phân tích HTML ngoài danh mục. API phân giải tên miền qua Cloudflare DNS, kết nối trực tiếp đến địa chỉ công khai đã kiểm tra và giới hạn thời gian, kích thước và cổng kết nối. Môi trường triển khai nên chặn mạng nội bộ ở tầng egress. Khi bật thêm `WEBSITE_CAPTURE_ENABLED`, Chromium dựng và chụp bản HTML đã tải trong ngữ cảnh offline. Môi trường thiếu Chromium vẫn trả phân tích nội dung.
 
+Để thử ảnh chụp website và ghi âm trên cùng một API local, cài Chromium cho đúng môi trường Python và đặt đồng thời `WEBSITE_PUBLIC_HTML_ENABLED`, `WEBSITE_CAPTURE_ENABLED`, `WHISPER_COMMAND` và `WHISPER_MODEL_PATH`. Có thể dùng PostgreSQL trong Compose với API chạy trực tiếp trên máy. Web cần build với `NEXT_PUBLIC_API_URL` trỏ tới API đó, còn API cần có origin của web trong `ALLOWED_ORIGINS`. Tệp thực thi Whisper và trọng số được lấy từ bản phát hành có sẵn và giữ ngoài Git. [Bản phát hành Whisper có gói Windows x64](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.8.4)
+
 ## PostgreSQL và Supabase
 
 Chạy [migration 001](../supabase/migrations/001_mvp.sql) và [migration 002](../supabase/migrations/002_sample_reviews.sql) theo thứ tự bằng SQL Editor hoặc `psql`. Dùng kết nối PostgreSQL trực tiếp hoặc session pooler với TLS. API truy cập schema riêng `tkc` bằng `DATABASE_URL`. Đặt thông tin kết nối và `APP_SECRET` ổn định trong secret của nhà cung cấp. Secret thay đổi sẽ làm mất khả năng đối chiếu các định danh đã băm.

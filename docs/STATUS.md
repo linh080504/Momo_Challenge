@@ -220,7 +220,7 @@ Staging chạy lại 32 mẫu dev với 0 lỗi API và 28 ca `uncertain`, gồm
 
 ### Thử OCRia-nano-1
 
-**U-07 · OCRia-nano-1.** Chạy gói `ocria-nano@1.0.0` qua LiteParse `2.21.3` và ONNX Runtime `1.31.1` trên CPU với một worker. Dùng 18 ảnh dev và 5 ảnh smoke, cùng Tesseract `vie+eng` trong một container tắt mạng. p95 gồm thời gian chạy lần đầu trong tiến trình. [Cách chạy](../eval/README.md#so-sánh-với-ocria-nano-1) · [Model card và giấy phép](https://huggingface.co/llamaindex/OCRia-nano-1)
+**U-07 · Số liệu thử nghiệm lưu lại.** Đã thử OCRia-nano-1 qua LiteParse trên CPU với một worker. Dùng 18 ảnh dev và 5 ảnh smoke, cùng Tesseract `vie+eng` trong một container tắt mạng. p95 gồm thời gian chạy lần đầu trong tiến trình. Ô thử nghiệm này đã được gỡ khỏi công cụ benchmark.
 
 | Tập | OCR | Từ tham chiếu giữ được | Tín hiệu luật dự án giữ được | Tên miền nghi vấn giữ được | `uncertain` | p95 OCR |
 |---|---|---:|---:|---:|---:|---:|
@@ -231,7 +231,7 @@ Staging chạy lại 32 mẫu dev với 0 lỗi API và 28 ca `uncertain`, gồm
 
 Trên dev, Nano khôi phục một tín hiệu tên miền ở `s011`. `s009` chuyển từ `medium` xuống `uncertain`, còn `s010` chuyển từ `high` xuống `medium`. Trên smoke, một ảnh hợp lệ chuyển từ `low` sang `uncertain`. Thử ghép chữ trực tiếp từ từng vùng của Nano tăng từ giữ được trên dev lên 1.225/2.170, với cùng kết quả phân loại.
 
-Nano đọc được dòng trạng thái và số tiền trên PNG biên lai tổng hợp và bản JPEG nén chất lượng 45. Hai vùng chữ của mỗi bản đều nằm trong ảnh. Cả hai bản có lỗi dấu ở nhãn số tiền, bản JPEG còn đổi dấu phân cách hàng nghìn. Chọn Tesseract cho OCR của MVP ở mốc này vì giữ thêm bằng chứng cảnh báo và phân loại đúng hơn trên smoke. Nano có thể tiếp tục được đo ở U-07 bằng bộ ảnh độc lập có nhãn.
+Nano đọc được dòng trạng thái và số tiền trên PNG biên lai tổng hợp và bản JPEG nén chất lượng 45. Hai vùng chữ của mỗi bản đều nằm trong ảnh. Cả hai bản có lỗi dấu ở nhãn số tiền, bản JPEG còn đổi dấu phân cách hàng nghìn. Tesseract được chọn ở mốc này vì giữ thêm bằng chứng cảnh báo và phân loại đúng hơn trên smoke.
 
 ### Báo cáo phân tích website
 
@@ -334,3 +334,11 @@ Yêu cầu GET công khai có định danh `User-Agent: PayPause/0.1` để hỗ
 ### Phân tích nội dung và căn cứ rủi ro
 
 Báo cáo ưu tiên chủ đề bài viết, chi tiết đáng chú ý và hành động mà trang yêu cầu. Các đoạn diễn giải của Qwen có phần mở rộng để xem trích đoạn làm căn cứ. Với trang quảng bá cá cược, Qwen chọn và sắp thứ tự các dấu hiệu đã phân loại, chẳng hạn lời mời nạp tiền, ưu đãi gắn với khoản nạp và tuyên bố tự nhận có giấy phép. Tuyên bố của trang được ghi là chưa xác minh. Tên miền, ngày đăng ký và kết quả đối chiếu nguồn được trình bày riêng với phạm vi của từng dữ kiện.
+
+## 2026-11-28 — MVP dùng model có sẵn
+
+- **Phân tích.** Prompt `signals-v10` đọc tín hiệu đã trích xuất cho tin vay và tuyển dụng. Phần ngữ cảnh và câu hỏi kiểm chứng phân biệt thông báo thông thường với yêu cầu nộp phí giải ngân, phí nhận việc hoặc nạp tiền làm nhiệm vụ. Ngữ cảnh đơn thuần không cộng điểm, kể cả khi phân tích tin nhắn đi kèm QR.
+- **Sáu đầu vào.** Ghi âm đã qua kiểm thử với Whisper và WAV tiếng Việt tổng hợp. Tab Ghi âm hỗ trợ dán lời thoại để tiếp tục khi không có tệp hoặc phiên âm gặp lỗi. Kiểm tra riêng VnExpress qua Qwen thật có ảnh chụp và ba nhận định từ nguồn đọc được.
+- **Vận hành.** Mục **Cấu hình hệ thống** dành cho chuyên viên hiển thị phiên bản prompt, tri thức và trạng thái cấu hình của các nguồn. Diễn tập tổng hợp hoàn tất 5 chiến dịch, 40 báo cáo, 40 nhãn và 5 quyết định. Kiểm thử trình duyệt đi qua luồng báo cáo, duyệt và nhận cảnh báo khi kiểm tra lại.
+- **Kiểm định.** Có 195 ca kiểm thử đạt khi bật PostgreSQL, 92 ca analyzer độc lập và 10 ca trình duyệt đạt trên preview có Qwen, Chromium và Whisper. Tập smoke tổng hợp 29 mẫu có 0 lỗi API. Nếu tính `uncertain` vào nhóm cảnh báo theo cổng hiện tại, recall là 100% và FPR là 16,7% (2/12 mẫu hợp lệ). Hai ca hợp lệ ở mức `uncertain` là biên lai và ghi âm. FPR vẫn vượt cổng 10%. Kết quả này cần được kiểm chứng trên holdout đại diện trước khi nghiệm thu.
+- **Phạm vi.** Bản này dùng Qwen4-Max, OCR, Whisper và dữ liệu đối chiếu. Phản hồi đã gán nhãn phục vụ đánh giá và rà quy tắc. Nghiệm thu từ xa, xác minh giao dịch qua ngân hàng và gửi cảnh báo ngoài web cần hạ tầng hoặc quyền của đối tác. [Bảng bàn giao hiện tại](MVP_HANDOFF.md)

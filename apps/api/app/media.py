@@ -12,7 +12,7 @@ WORKERS = BoundedSemaphore(3)
 @contextmanager
 def media_slot():
     if not WORKERS.acquire(blocking=False):
-        raise AnalyzerError(429, "Đang có nhiều ảnh được xử lý. Hãy thử lại sau vài giây.")
+        raise AnalyzerError(429, "Đang có nhiều tệp được xử lý. Hãy thử lại sau vài giây.")
     try:
         yield
     finally:

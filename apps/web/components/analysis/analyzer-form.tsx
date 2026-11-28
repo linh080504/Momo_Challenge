@@ -20,6 +20,7 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
   onCheck?: (draft: AnalyzerDraft) => void;
 }) {
   const website = kind === "website";
+  const screenshot = kind === "image";
   const mediaMode = kind === "image" || kind === "receipt" || kind === "audio" ? kind : null;
   const headingId = useId();
   const [text, setText] = useState(initialDraft?.text ?? "");
@@ -39,7 +40,8 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
   const resultElement = useRef<HTMLDivElement>(null);
   const captureElement = useRef<HTMLElement>(null);
   const capturePicture = capture ? `data:image/jpeg;base64,${capture.jpeg}` : undefined;
-  const canSubmit = mediaMode ? Boolean(file) : Boolean(text.trim());
+  const canSubmit = mediaMode && kind !== "audio" ? Boolean(file) :
+    Boolean(text.trim() || (kind === "audio" && file));
 
   useEffect(() => () => active.current?.abort(), []);
   useEffect(() => {
@@ -64,7 +66,8 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
     if (!savedInput) setResult(null);
     const controller = new AbortController();
     active.current = controller;
-    const timeout = window.setTimeout(() => controller.abort("timeout"), website ? 45000 : kind === "audio" ? 35000 : 20000);
+    const timeout = window.setTimeout(() => controller.abort("timeout"),
+      website || screenshot ? 45000 : kind === "audio" ? 35000 : 20000);
     try {
       let input = savedInput;
       if (!input) {
@@ -78,6 +81,7 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
           input.image_base64 = await receiptInput(file);
         } else if (file) {
           Object.assign(input, await imageInput(file));
+          if (screenshot) input.qwen_vision = true;
         }
       }
       let signedIn = currentSession();
@@ -108,7 +112,7 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
     }
   }
 
-  function submit(event: FormEvent) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
     if (onCheck) {
@@ -169,16 +173,21 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
           {mediaMode && <>
             <Upload file={file} onChange={setFile} disabled={busy} mode={mediaMode} />
             <details className="details">
-              <summary>Thêm nội dung đi kèm</summary>
-              <label>Tin nhắn đi kèm (tùy chọn)
+              <summary>{kind === "audio" ? "Dán lời thoại hoặc thêm ngữ cảnh" : "Thêm nội dung đi kèm"}</summary>
+              <label>{kind === "audio" ? "Lời thoại hoặc nội dung đi kèm" : "Tin nhắn đi kèm (tùy chọn)"}
                 <textarea value={text} maxLength={12000} disabled={busy}
                   onChange={event => setText(event.target.value)} rows={2} />
               </label>
+              {kind === "audio" && <p className="muted micro">Nếu phiên âm gặp lỗi, hãy gỡ tệp và kiểm tra bằng phần lời bạn đã chép.</p>}
             </details>
           </>}
           {!compact && websiteEvidence}
           {error && !result && <p role="alert" className="error">{error}</p>}
-          <button className="button primary check-button" disabled={busy || !canSubmit}>
+          {screenshot && <p id={headingId + "-qwen"} className="micro muted">
+            Khi bấm kiểm tra, ảnh được gửi tới QwenCloud để đọc và phân tích. Hãy che thông tin cá nhân trước khi gửi.
+          </p>}
+          <button type="submit" className="button primary check-button"
+            aria-describedby={screenshot ? headingId + "-qwen" : undefined} disabled={busy || !canSubmit}>
             {busy ? <LoaderCircle size={21} className="spinning" /> : <Search size={21} />}
             {busy ? "Đang kiểm tra…" : website ? "Phân tích website" : "Kiểm tra ngay"}
           </button>

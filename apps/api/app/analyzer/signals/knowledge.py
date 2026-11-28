@@ -18,7 +18,7 @@ SEASONAL = re.compile(r"\bblack[ -]+friday\b", re.I)
 
 
 def retrieve_guidance(matches, url_suspicious, text=""):
-    groups = dict.fromkeys(rule.scenario.split(".")[0] for rule, _ in matches)
+    groups = dict.fromkeys(rule.scenario.split(".")[0] for rule, _ in matches if rule.scenario)
     if url_suspicious:
         groups.setdefault("G5", None)
     keys = ["black-friday"] if SEASONAL.search(text) else []

@@ -10,14 +10,12 @@ import time
 import unicodedata
 from collections import Counter
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENGINES = ("tesseract", "pp-ocrv5", "pp-ocrv6-small")
-ENGINES = (*DEFAULT_ENGINES, "ocria-nano")
 
 
 def load_engine(name):
@@ -27,9 +25,6 @@ def load_engine(name):
 
         settings = Settings(_env_file=None, ocr_command="tesseract", ocr_languages="vie+eng")
         return lambda image: recognize(image, settings)
-
-    if name == "ocria-nano":
-        return load_ocria_nano()
 
     import numpy as np
     from paddleocr import PaddleOCR
@@ -46,22 +41,6 @@ def load_engine(name):
         image.thumbnail((2000, 2000))
         result = ocr.predict(np.asarray(image)[:, :, ::-1].copy())
         return "\n".join(line for page in result for line in page["rec_texts"])
-
-    return read
-
-
-def load_ocria_nano():
-    from liteparse import LiteParse
-
-    parser = LiteParse(ocr_backend="ocria-nano", output_format="text", max_pages=1, num_workers=1,
-                       ocr_failure_fatal=True, preserve_very_small_text=True, extract_links=False, quiet=True)
-
-    def read(image):
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "figure.png"
-            image.thumbnail((2000, 2000))
-            image.save(path, format="PNG")
-            return parser.parse(path).text.strip()[:12000]
 
     return read
 
@@ -140,19 +119,14 @@ def main():
     data = parser.add_mutually_exclusive_group(required=True)
     data.add_argument("--dataset", type=Path)
     data.add_argument("--preload", action="store_true", help="Tải trọng số trước mà không đọc ảnh")
-    parser.add_argument("--engines", nargs="+", choices=ENGINES, default=DEFAULT_ENGINES)
+    parser.add_argument("--engines", nargs="+", choices=DEFAULT_ENGINES, default=DEFAULT_ENGINES)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     sys.path.insert(0, str(ROOT / "apps" / "api"))
 
     if args.preload:
         for engine in args.engines:
-            if engine == "ocria-nano":
-                from liteparse import models
-
-                models.pull("ocria-nano@1.0.0")
-            else:
-                load_engine(engine)
+            load_engine(engine)
         return
     rows = [json.loads(line) for line in args.dataset.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
     images = [row for row in rows if row.get("image") and row.get("transcript") and row.get("image_kind") != "receipt"]

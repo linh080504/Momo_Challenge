@@ -8,7 +8,7 @@ import { InvestigationWorkspace } from "./investigation";
 import { SampleReviewPanel } from "./sample-review";
 import {
   api, ApiError, currentSession, entityLabels, riskLabels, saveSession,
-  type Campaign, type CampaignState, type OpsOverview, type Session,
+  type Campaign, type CampaignState, type OpsOverview, type OpsSystem, type Session,
 } from "@/lib/api";
 
 const labels: Record<CampaignState, string> = { pending: "Chờ duyệt", approved: "Đã duyệt", rejected: "Đã bác bỏ" };
@@ -28,6 +28,8 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [detail, setDetail] = useState<Campaign | null>(null);
   const [overview, setOverview] = useState<OpsOverview | null>(null);
+  const [system, setSystem] = useState<OpsSystem | null>(null);
+  const [systemError, setSystemError] = useState(false);
   const [reload, setReload] = useState(0);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -61,6 +63,15 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
     });
     return () => controller.abort();
   }, [campaignId, reload, session, state]);
+
+  useEffect(() => {
+    if (campaignId || session?.role !== "ops") return;
+    const controller = new AbortController();
+    api<OpsSystem>("/v1/ops/system", "GET", undefined, session.token, controller.signal)
+      .then(data => { setSystem(data); setSystemError(false); })
+      .catch(() => { if (!controller.signal.aborted) setSystemError(true); });
+    return () => controller.abort();
+  }, [campaignId, reload, session]);
 
   async function decide(decision: "approve" | "reject") {
     if (!session || !detail || working) return;
@@ -162,6 +173,25 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
         </div>}
       </section> : !error && <p role="status">Đang tải chiến dịch…</p> :
         <section className="panel workspace-panel">
+          <details className="details ops-system">
+            <summary>Cấu hình hệ thống</summary>
+            {systemError ? <p role="alert">Chưa đọc được cấu hình. Hãy tải lại.</p> : system ? <>
+              <p className="muted">API {system.app_version} · Prompt {system.prompt_version} · Tri thức {system.knowledge_version}</p>
+              <dl className="website-sources">{[
+                ["Qwen", system.qwen_model],
+                ["Đọc nội dung website", system.website_read_enabled],
+                ["Ảnh chụp website", system.website_read_enabled && system.website_capture_enabled],
+                ["Phiên âm Whisper", system.speech_configured],
+                ["Google Safe Browsing", system.safe_browsing_configured],
+                ["VirusTotal", system.reputation_configured.virustotal],
+                ["URLhaus", system.reputation_configured.urlhaus],
+                ["PhishTank", system.reputation_configured.phishtank],
+                ["RDAP", system.reputation_configured.rdap],
+              ].map(([label, enabled]) => <div key={String(label)}>
+                <dt>{label}</dt><dd>{typeof enabled === "string" ? enabled : enabled ? "Đã cấu hình" : "Chưa cấu hình"}</dd>
+              </div>)}</dl>
+            </> : <p role="status">Đang tải cấu hình…</p>}
+          </details>
           {overview && <dl className="ops-overview" aria-label="Tổng quan vận hành">
             <div><dt>Báo cáo trong 24 giờ</dt><dd>{overview.reports_24h}</dd></div>
             <div><dt>Quyết định trong 24 giờ</dt><dd>{overview.decisions_24h}</dd></div>

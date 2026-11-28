@@ -34,7 +34,8 @@ export function Result({ result, initialSession, receipt, websiteImage, websiteR
   const [message, setMessage] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const confirmed = result.evidence.some(item => item.source === "internal_blacklist" && item.weight > 0);
-  const limitedWebsite = Boolean(result.website_report) && result.risk_level === "uncertain" && result.risk_score === 0;
+  const insufficientEvidence = result.risk_level === "uncertain" && result.risk_score === 0;
+  const limitedWebsite = Boolean(result.website_report) && insufficientEvidence;
   const officialBrand = result.url_checks?.length === 1 ? result.url_checks[0].official_brand : null;
   const urlOnly = result.website_report && !result.website_report.screenshot && !result.website_report.markup &&
     !result.website_report.article && result.website_report.public_page?.status !== "read";
@@ -93,7 +94,7 @@ export function Result({ result, initialSession, receipt, websiteImage, websiteR
   </div> : <div className={"result-banner risk-" + result.risk_level}>
         <span className="result-icon">{result.risk_level === "low" ? <ShieldCheck size={26} /> : <AlertTriangle size={26} />}</span>
         <div><h2>{riskTitle}</h2><p>{summary}</p></div>
-        {!limitedWebsite && <div className="result-score" aria-label={result.risk_score + " trên 100"}>{result.risk_score}<small>/100</small></div>}
+        {!insufficientEvidence && <div className="result-score" aria-label={result.risk_score + " trên 100"}>{result.risk_score}<small>/100</small></div>}
       </div>;
   return (
     <section className={result.website_report ? "result-panel website-result-panel" : "panel result-panel"} aria-label="Kết quả phân tích">
@@ -101,6 +102,11 @@ export function Result({ result, initialSession, receipt, websiteImage, websiteR
       <div className="result-body">
         {confirmed && <p className="notice verified"><ShieldCheck size={20} /> Cảnh báo đã được chuyên viên xác nhận.</p>}
         {result.degraded && !result.website_report && <p className="notice"><Info size={19} /> Chế độ hạn chế. Một phần dịch vụ đối chiếu hoặc mô hình đang tắt hoặc gián đoạn.</p>}
+        {result.model === "qwen4-max" && (!result.website_report || result.image_reader === "qwen4-max") &&
+          <p className="muted">Qwen4-Max đã đánh giá các dấu hiệu trích được từ nội dung.</p>}
+        {result.image_reader === "qwen4-max" && <p className="muted">Ảnh được đọc bằng Qwen4-Max Vision.</p>}
+        {result.image_reader === "local_ocr_fallback" &&
+          <p className="notice"><Info size={19} /> Qwen chưa đọc được ảnh. Hệ thống đã dùng OCR cục bộ.</p>}
         {result.document && <ReceiptEvidence evidence={result.document} file={receipt} />}
         {!result.website_report && result.url_checks && <details className="details">
           <summary>Kiểm tra tên miền</summary>
@@ -110,10 +116,15 @@ export function Result({ result, initialSession, receipt, websiteImage, websiteR
             {item.signals.map(signal => <p key={signal}>{signal}</p>)}
           </li>)}</ul>
         </details>}
+        {!!result.content_context?.length && <>
+          <h3>Ngữ cảnh của nội dung</h3>
+          <ul className="flag-list">{result.content_context.map(item =>
+            <li key={item.quote + item.reason}><blockquote>“{item.quote}”</blockquote><p>{item.reason}</p></li>)}</ul>
+        </>}
         <h3>Dấu hiệu nhận thấy</h3>
         {result.red_flags.length ? <ul className="flag-list">{result.red_flags.map(flag =>
           <li key={flag.quote + flag.reason}><blockquote>“{flag.quote}”</blockquote><p>{flag.reason}</p></li>
-        )}</ul> : <p className="muted">Chưa có đủ câu chữ để trích dẫn trực tiếp.</p>}
+        )}</ul> : <p className="muted">Chưa ghi nhận câu chữ chứa dấu hiệu rủi ro rõ ràng.</p>}
         <h3><CircleHelp size={19} /> Câu hỏi kiểm chứng</h3>
         <ul className="question-list">{result.verification_questions.map(question => <li key={question}>{question}</li>)}</ul>
         {!!result.guidance?.length && <details className="details">

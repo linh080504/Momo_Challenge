@@ -5,7 +5,7 @@ import io
 import os
 import subprocess
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageOps
 
 from ...media import media_slot, read_media
 from ..contract import AnalyzerError
@@ -52,11 +52,42 @@ def image_for(request):
 
 def read_image(image, settings):
     with media_slot():
+        filtered = _remove_red_annotation(image)
+        if filtered is not None:
+            text, _ = _recognize(filtered, settings, boxes=False)
+            if any(char.isalnum() for char in text):
+                return text.strip()[:12000]
         return recognize(image, settings)
 
 
+def _remove_red_annotation(image):
+    sample = image.copy()
+    sample.thumbnail((2000, 2000))
+    red, green, blue = sample.convert("RGB").split()
+    mask = ImageChops.subtract(red, ImageChops.lighter(green, blue)).point(
+        lambda value: 255 if value >= 45 else 0
+    )
+    bounds = mask.getbbox()
+    if not bounds:
+        return None
+    left, top, right, bottom = bounds
+    # A broad annotation can cross text. Keep ordinary red labels and dense colored graphics.
+    area = sample.width * sample.height
+    if right - left < sample.width * 0.6 or bottom - top < sample.height * 0.6:
+        return None
+    if not 0.005 <= mask.histogram()[255] / area <= 0.05:
+        return None
+    bright = sum(ImageChops.darker(red, ImageChops.darker(green, blue)).histogram()[215:])
+    if bright < area / 2:
+        return None
+    return Image.composite(Image.new("RGB", sample.size, "white"), sample, mask)
+
+
 def recognize(image, settings):
-    return _recognize(image, settings, boxes=False)[0]
+    text, _ = _recognize(image, settings, boxes=False)
+    if not any(char.isalnum() for char in text):
+        raise AnalyzerError(422, "Chưa đọc được chữ trong ảnh. Hãy dùng ảnh rõ hơn hoặc dán nội dung.")
+    return text.strip()[:12000]
 
 
 def _recognize(image, settings, *, boxes):
@@ -78,9 +109,7 @@ def _recognize(image, settings, *, boxes):
     except (OSError, subprocess.SubprocessError) as exc:
         raise AnalyzerError(503, "Bộ đọc chữ đang gián đoạn. Bạn có thể thử dán nội dung tin nhắn.") from exc
     if not boxes:
-        if not any(char.isalnum() for char in text):
-            raise AnalyzerError(422, "Chưa đọc được chữ trong ảnh. Hãy dùng ảnh rõ hơn hoặc dán nội dung.")
-        return text.strip()[:12000], []
+        return text, []
     words, regions = [], []
     for row in csv.DictReader(io.StringIO(text), delimiter="\t"):
         word = (row.get("text") or "").strip()

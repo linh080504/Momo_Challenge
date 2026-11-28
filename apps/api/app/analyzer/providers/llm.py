@@ -5,19 +5,29 @@ import httpx
 
 from ...config import ROOT
 from ...kit import pii_mask
+from ...privacy.entities import URL
 
 PROMPT = (ROOT / "prompts" / "analyzer_signals_v1.md").read_text(encoding="utf-8")
 V0 = (ROOT / "prompts" / "analyzer_v0.md").read_text(encoding="utf-8")
 TAXONOMY = V0.split("TAXONOMY RÚT GỌN", 1)[1].split("YÊU CẦU ĐẦU RA", 1)[0]
 SCENARIOS = frozenset(re.findall(r"^  (G[1-5]\.\d+) ", TAXONOMY, re.M))
 RISK = {"high": 80, "medium": 50, "uncertain": 30, "low": 15}
-PROMPT_VERSION = "signals-v8"
+PROMPT_VERSION = "signals-v12"
 QWEN_MODEL = "qwen4-max"
 QWEN_RESPONSES_URL = "https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1/responses"
 INSTRUCTIONS = PROMPT.replace("{{taxonomy}}", TAXONOMY)
 WEBSITE_EXPLANATION = (ROOT / "prompts" / "website_explanation_v1.md").read_text(encoding="utf-8")
+SCREENSHOT_RISK = (ROOT / "prompts" / "screenshot_risk_v1.md").read_text(encoding="utf-8")
 JSON_FENCE = re.compile(r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```", re.IGNORECASE | re.DOTALL)
 PUBLIC_LINK = re.compile(r"https?://|www\.|[\w-]+\.(?:vn|com|net|org|io)\b", re.I)
+SCREENSHOT_REASONS = {
+    "credential_request": "Đoạn này có dấu hiệu yêu cầu cung cấp thông tin đăng nhập hoặc mã xác thực.",
+    "personal_account": "Đoạn này có dấu hiệu yêu cầu chuyển tiền hoặc nộp phí trước để được nhận một quyền lợi.",
+    "urgency": "Đoạn này có dấu hiệu thúc ép hành động bằng thời hạn gấp hoặc lời dọa mất tiền.",
+    "secrecy": "Đoạn này có dấu hiệu ngăn người nhận kiểm chứng với người khác.",
+    "link": "Đoạn này có dấu hiệu thúc bấm đường dẫn để xử lý một yêu cầu nhạy cảm.",
+    "greed": "Đoạn này có dấu hiệu dùng phần thưởng hoặc thu nhập hứa hẹn để lôi kéo hành động.",
+}
 PAGE_PURPOSES = {
     "news": "tin tức hoặc thông tin thời sự",
     "project_profile": "giới thiệu một dự án, chương trình hoặc tổ chức",
@@ -27,14 +37,14 @@ PAGE_PURPOSES = {
 }
 
 
-def _qwen_output(instructions, facts_json, key, timeout, max_output_tokens):
+def _qwen_output(instructions, input_data, key, timeout, max_output_tokens):
     response = httpx.post(
         QWEN_RESPONSES_URL,
         headers={"Authorization": f"Bearer {key}"},
         json={
             "model": QWEN_MODEL,
             "instructions": instructions,
-            "input": facts_json,
+            "input": input_data,
             "max_output_tokens": max_output_tokens,
             "reasoning": {"effort": "none"},
             "store": False,
@@ -49,19 +59,29 @@ def _qwen_output(instructions, facts_json, key, timeout, max_output_tokens):
     )
 
 
-def query_qwen(settings, limits, instructions, facts, *, timeout=3.2, max_output_tokens=200):
+def request_qwen_text(settings, limits, instructions, input_data, *, timeout, max_output_tokens):
     key = settings.dashscope_api_key.get_secret_value().strip()
     if not key:
         return None, "disabled"
     if not limits.take("llm-daily", settings.llm_calls_per_day, 86400):
         return None, "quota"
     try:
-        output = _qwen_output(instructions, json.dumps(facts, ensure_ascii=False), key, timeout, max_output_tokens)
+        return _qwen_output(instructions, input_data, key, timeout, max_output_tokens).strip(), "ok"
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        return None, "unavailable"
+
+
+def query_qwen(settings, limits, instructions, facts, *, timeout=3.2, max_output_tokens=200):
+    output, status = request_qwen_text(settings, limits, instructions, json.dumps(facts, ensure_ascii=False),
+                                       timeout=timeout, max_output_tokens=max_output_tokens)
+    if output is None:
+        return None, status
+    try:
         fenced = JSON_FENCE.fullmatch(output.strip())
         if fenced:
             output = fenced[1]
         return json.loads(output), "ok"
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+    except ValueError:
         return None, "unavailable"
 
 
@@ -120,7 +140,39 @@ def _website_notes(content, public, options):
     return [*notes, *findings]
 
 
-def infer(matches, evidence, benign, settings, limits, guidance=(), website_context=None, explanation_options=None):
+def screenshot_excerpts(text):
+    masked = pii_mask.mask_text(URL.sub("[đường dẫn]", text))["masked"]
+    masked = re.sub(r"\[(?:OTP|ID|PHONE|EMAIL|ACCOUNT|CARD)_\d+\]", "[đã che]", masked)
+    masked = re.sub(r"\d(?:[\d .-]*\d)?", "[số]", masked)
+    chunks = re.findall(r".{1,420}(?:\s|$)|.{1,420}", " ".join(masked[:4800].split()))
+    return [chunk.strip() for chunk in chunks if any(char.isalpha() for char in chunk)][:12]
+
+
+def _screenshot_flags(content, excerpts):
+    entries = content.get("screenshot_flags")
+    if not isinstance(entries, list):
+        return []
+    flags = []
+    for entry in entries[:3]:
+        if not isinstance(entry, dict):
+            continue
+        index, quote, tactic = (entry.get(key) for key in ("excerpt_index", "quote", "tactic"))
+        if type(index) is not int or not 0 <= index < len(excerpts) or not isinstance(quote, str):
+            continue
+        if not isinstance(tactic, str) or tactic not in SCREENSHOT_REASONS:
+            continue
+        quote = " ".join(quote.split())
+        if len(quote) > 180 or not 3 <= len(quote.split()) <= 20:
+            continue
+        if not re.search(r"(?<!\w)" + re.escape(quote) + r"(?!\w)", excerpts[index]):
+            continue
+        if not any(flag["quote"] == quote for flag in flags):
+            flags.append({"quote": quote, "reason": SCREENSHOT_REASONS[tactic], "tactic": tactic})
+    return flags
+
+
+def infer(matches, evidence, benign, settings, limits, guidance=(), website_context=None, explanation_options=None,
+          *, image_excerpts=()):
     facts = {
         "signals": [rule.finding for rule, _ in matches],
         "verified_sources": [
@@ -135,12 +187,18 @@ def infer(matches, evidence, benign, settings, limits, guidance=(), website_cont
     if explanation_options:
         facts["explanation_options"] = {key: item["finding"] for key, item in explanation_options.items()}
         instructions += "\n" + WEBSITE_EXPLANATION
-    content, _ = query_qwen(settings, limits, instructions, facts, timeout=12.0 if explanation_options else 3.2,
-                            max_output_tokens=900 if explanation_options else 200)
+    if image_excerpts:
+        facts["screenshot_excerpts"] = image_excerpts
+        instructions += "\n" + SCREENSHOT_RISK
+    detailed = bool(explanation_options or image_excerpts)
+    content, _ = query_qwen(settings, limits, instructions, facts, timeout=12.0 if detailed else 3.2,
+                            max_output_tokens=900 if detailed else 200)
     if isinstance(content, dict) and "scenario_id" in content:
         risk, scenario = content.get("risk_level"), content["scenario_id"]
         if isinstance(risk, str) and risk in RISK and (scenario is None or isinstance(scenario, str) and scenario in SCENARIOS):
             explanation = _website_notes(content, (website_context or {}).get("public_html", {}),
                                          explanation_options) if explanation_options else []
+            if image_excerpts:
+                explanation = _screenshot_flags(content, image_excerpts)
             return QWEN_MODEL, risk, scenario, explanation
     return None

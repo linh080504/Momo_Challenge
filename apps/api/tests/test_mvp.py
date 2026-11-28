@@ -80,6 +80,53 @@ def test_schema_quotes_risk_and_privacy(client):
     assert analyze(client, "Xin trao đổi thêm")["risk_level"] == "uncertain"
 
 
+def test_loan_approval_routes_to_qwen_as_context_without_raising_risk(configured, monkeypatch):
+    from app.analyzer.providers import llm
+
+    configured.dashscope_api_key = SecretStr("fake-qwen-key")
+    calls = []
+
+    def reply(_instructions, payload, *_):
+        facts = json.loads(payload)
+        assert facts["signals"] and "khoản vay" in facts["signals"][0]
+        assert "private-message-marker" not in payload and "6.000.000" not in payload
+        calls.append(facts)
+        return '{"risk_level":"high","scenario_id":"G5.4"}'
+
+    monkeypatch.setattr(llm, "_qwen_output", reply)
+    message = "Yêu cầu vay 6.000.000 VND được phê duyệt sơ bộ. Hồ sơ private-message-marker."
+    with TestClient(create_app(configured)) as client:
+        result = analyze(client, message)
+
+    assert len(calls) == 1
+    assert (result["model"], result["analysis_path"], result["degraded"]) == ("qwen4-max", "deep", False)
+    assert (result["risk_level"], result["risk_score"], result["scenario_id"]) == ("uncertain", 0, None)
+    assert result["red_flags"] == []
+    assert result["content_context"][0]["quote"] == "Yêu cầu vay"
+
+
+@pytest.mark.parametrize(("statement", "risk"), [
+    ("Vui lòng nộp phí giải ngân.", "medium"),
+    ("Bạn không cần phải nộp phí giải ngân.", "uncertain"),
+])
+def test_loan_fee_signal_distinguishes_requests_from_negation(client, statement, risk):
+    result = analyze(client, f"Hồ sơ vay đã được duyệt. {statement}")
+    assert result["risk_level"] == risk
+    assert any(flag["quote"] == "nộp phí giải ngân" for flag in result["red_flags"]) == (risk == "medium")
+
+
+def test_job_message_and_payment_qr_distinguish_context_from_advance_fee(client):
+    text = "Tin tuyển dụng cho ứng viên làm việc tại nhà."
+    notice = analyze(client, text)
+    assert notice["risk_level"] == "uncertain"
+    assert not notice["red_flags"] and notice["content_context"]
+    risky = text + " Ứng viên phải nạp tiền để thực hiện nhiệm vụ."
+    assert analyze(client, risky)["scenario_id"] == "G3.1"
+    payload = vietqr.build("970436", ACCOUNT, 50000)
+    assert client.post("/v1/qr/parse", json={"payload": payload, "text": text}).json()["risk"] == "low"
+    assert client.post("/v1/qr/parse", json={"payload": payload, "text": risky}).json()["risk"] == "medium"
+
+
 @pytest.mark.parametrize(("payload", "status"), [
     ({}, 422),
     ({"image_base64": "!", "image_mime": "image/jpeg"}, 422),
@@ -105,13 +152,78 @@ def test_stream_uses_ocr_output_and_real_progress(client, monkeypatch):
     assert ACCOUNT not in response.text
 
 
+@pytest.mark.parametrize("vision_ok", [True, False])
+def test_qwen_vision_requires_consent_and_uses_local_fallback(configured, monkeypatch, vision_ok):
+    from app.analyzer.agents import analyze as agent
+    from app.analyzer.providers import llm
+
+    configured.dashscope_api_key = SecretStr("fake-qwen-key")
+    calls = []
+    monkeypatch.setattr(agent, "read_image", lambda *_: "Con về ăn cơm nhé.")
+
+    def reply(instructions, data, _key, _timeout, _max_output_tokens):
+        if isinstance(data, list):
+            assert "chép lại NGUYÊN VĂN" in instructions
+            assert data[0]["content"][0] == {
+                "type": "input_text", "text": "Chép lại nguyên văn toàn bộ chữ trong ảnh đính kèm.",
+            }
+            image = data[0]["content"][1]
+            assert image["type"] == "input_image" and image["image_url"].startswith("data:image/jpeg;base64,")
+            calls.append(image)
+            return "Gửi mã OTP để xác minh." if vision_ok else "[KHÔNG CÓ CHỮ]"
+        assert "data:image" not in data
+        assert json.loads(data)["screenshot_excerpts"] == ["Gửi mã OTP để xác minh."]
+        return '{"risk_level":"high","scenario_id":"G5.4"}'
+
+    monkeypatch.setattr(llm, "_qwen_output", reply)
+    body = image_body(Image.new("RGB", (50, 40), "white"))
+    with TestClient(create_app(configured)) as client:
+        default = client.post("/v1/analyze", json=body).json()
+        assert not calls and default["image_reader"] == "local_ocr"
+        wrong_type = client.post("/v1/analyze", json={**body, "image_kind": "receipt", "qwen_vision": True})
+        assert wrong_type.status_code == 422 and not calls
+        vision = client.post("/v1/analyze", json={**body, "qwen_vision": True}).json()
+    assert len(calls) == 1
+    assert vision["image_reader"] == ("qwen4-max" if vision_ok else "local_ocr_fallback")
+    assert vision["risk_level"] == ("high" if vision_ok else "low")
+
+
+@pytest.mark.parametrize(("quote", "risk"), [
+    ("Bạn cần ứng trước một khoản để nhận lại tiền", "medium"),
+    ("Người gửi đòi mã xác thực", "uncertain"),
+])
+def test_vision_transcript_is_analyzed_with_grounded_flags(configured, monkeypatch, quote, risk):
+    from app.analyzer.providers import llm
+
+    configured.dashscope_api_key = SecretStr("fake-qwen-key")
+
+    def reply(instructions, data, *_args):
+        if isinstance(data, list):
+            return "Bạn cần ứng trước một khoản để nhận lại tiền. Mã hồ sơ 465232. Email sample@example.invalid."
+        assert "screenshot_flags" in instructions
+        assert "465232" not in data and "sample@example.invalid" not in data
+        return json.dumps({"risk_level": "high", "scenario_id": None, "screenshot_flags": [
+            {"excerpt_index": 0, "quote": quote, "tactic": "personal_account"},
+        ]})
+
+    monkeypatch.setattr(llm, "_qwen_output", reply)
+    with TestClient(create_app(configured)) as client:
+        response = client.post("/v1/analyze", json={
+            **image_body(Image.new("RGB", (50, 40), "white")), "qwen_vision": True,
+        })
+    assert response.status_code == 200
+    result = response.json()
+    assert (result["model"], result["analysis_path"], result["risk_level"]) == ("qwen4-max", "deep", risk)
+    assert [flag["quote"] for flag in result["red_flags"]] == ([quote] if risk == "medium" else [])
+
+
 def test_public_input_contract_and_qr_result_variants(client):
     paths = client.get("/openapi.json").json()["paths"]
     ask = paths["/v1/analyze"]["post"]
     stream = paths["/v1/analyze/stream"]["post"]
     parse = paths["/v1/qr/parse"]["post"]
     inputs = ask["requestBody"]["content"]["application/json"]["schema"]["properties"]
-    assert set(inputs) == {"text", "image_base64", "image_mime", "image_kind", "audio_base64", "qr_payload", "url",
+    assert set(inputs) == {"text", "image_base64", "image_mime", "image_kind", "qwen_vision", "audio_base64", "qr_payload", "url",
                            "website_html", "website_preview", "locale"}
     assert set(stream["responses"]["200"]["content"]) == {"application/x-ndjson"}
     variants = parse["responses"]["200"]["content"]["application/json"]["schema"]["discriminator"]
@@ -132,6 +244,37 @@ def test_stream_ends_with_one_error_if_later_input_fails(client, monkeypatch):
     assert first["stage"] == "image_read"
     assert last["status"] == 422 and last["error"] and "result" not in last
     assert client.post("/v1/analyze", json=data).status_code == 422
+
+
+def test_ocr_filters_red_marks_and_recognizes_unaccented_fee_scam(client, monkeypatch):
+    from app.analyzer.providers import ocr
+
+    image = Image.new("RGB", (240, 180), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((0, 0, 239, 179), fill="red", width=2)
+    draw.line((0, 179, 239, 0), fill="red", width=2)
+    draw.rectangle((30, 80, 40, 82), fill="black")
+
+    def read_media(_mode, data, _settings, **_kwargs):
+        with Image.open(io.BytesIO(data)) as prepared:
+            assert prepared.getpixel((0, 0)) == (255, 255, 255)
+            assert prepared.getpixel((35, 81)) == (0, 0, 0)
+        return "Phi dich vu se\nbi tru \"cong 2 gio.\nVui long nhan vao\nh!(ps://ma-... de huy"
+
+    monkeypatch.setattr(ocr, "read_media", read_media)
+    response = client.post("/v1/analyze", json=image_body(image))
+    assert response.status_code == 200
+    result = response.json()
+    assert result["risk_level"] == "high"
+    assert result["scenario_id"] == "G5.1"
+    assert {flag["tactic"] for flag in result["red_flags"]} == {"link", "urgency"}
+    assert "url_checks" not in result
+
+
+def test_periodic_fee_notice_with_official_app_does_not_match_cancellation_link(client):
+    result = analyze(client, "Phí dịch vụ sẽ bị trừ trong 2 giờ. Vui lòng mở ứng dụng chính thức để hủy.")
+    assert result["risk_level"] == "uncertain"
+    assert not any(flag["tactic"] == "link" for flag in result["red_flags"])
 
 
 def test_real_ocr(client):

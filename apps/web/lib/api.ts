@@ -33,12 +33,14 @@ export type Analysis = {
   scenario_group: string | null;
   summary: string;
   red_flags: { quote: string; reason: string }[];
+  content_context?: { quote: string; reason: string }[];
   verification_questions: string[];
   evidence: { source: string; finding: string; weight: number }[];
   entities: Entity[];
   ai_disclaimer: string;
   degraded: boolean;
   model?: string;
+  image_reader?: "qwen4-max" | "local_ocr" | "local_ocr_fallback";
   analysis_path?: "fast" | "deep";
   document?: DocumentEvidence;
   url_checks?: UrlCheck[];
@@ -59,6 +61,7 @@ export type Input = {
   image_base64?: string;
   image_mime?: string;
   image_kind?: "image" | "receipt";
+  qwen_vision?: boolean;
   audio_base64?: string;
   qr_payload?: string;
 };
@@ -72,6 +75,17 @@ export type OpsSample = {
   inputs: string[] | null; history: SampleReview[];
 };
 export type OpsOverview = { reports_24h: number; decisions_24h: number; pending: number; approved: number };
+export type OpsSystem = {
+  app_version: string;
+  prompt_version: string;
+  knowledge_version: string;
+  qwen_model: string | null;
+  safe_browsing_configured: boolean;
+  reputation_configured: Record<"virustotal" | "urlhaus" | "phishtank" | "rdap", boolean>;
+  speech_configured: boolean;
+  website_read_enabled: boolean;
+  website_capture_enabled: boolean;
+};
 export type CampaignAlerts = { transaction_status: "unverified"; channels: {
   id: "web" | "in_app" | "email" | "sms" | "internal"; state: "preview" | "published"; title: string; body: string;
 }[] };

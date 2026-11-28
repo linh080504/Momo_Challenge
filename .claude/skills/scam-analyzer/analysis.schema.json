@@ -21,6 +21,13 @@
         }
       }
     },
+    "content_context": {
+      "type": "array", "maxItems": 3,
+      "items": {
+        "type": "object", "required": ["quote", "reason"], "additionalProperties": false,
+        "properties": {"quote": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    },
     "verification_questions": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
     "recommended_action": {"type": "string", "enum": ["stop_and_verify", "ask_guardian", "report", "proceed_with_clean_qr", "no_action"]},
     "entities": {
@@ -47,6 +54,7 @@
     },
     "ai_disclaimer": {"type": "string", "const": "Kết quả do AI phân tích và có thể sai. Hãy xác minh qua số tổng đài chính thức trước khi chuyển tiền."},
     "model": {"type": "string"},
+    "image_reader": {"enum": ["qwen4-max", "local_ocr", "local_ocr_fallback"]},
     "analysis_path": {"enum": ["fast", "deep"]},
     "specialized_models": {"type": "object", "properties": {"fraud_url": {"type": "string"}}},
     "guidance": {"type": "array", "maxItems": 3, "items": {

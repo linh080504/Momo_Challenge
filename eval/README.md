@@ -55,18 +55,6 @@ PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True python eval/tools/check_ocr.py --prel
 PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True python eval/tools/check_ocr.py --dataset eval/dataset.jsonl --output eval/generated/ocr-dev-comparison.json
 ```
 
-### So sánh với OCRia-nano-1
-
-Chọn `--engines tesseract ocria-nano` để chạy lại cùng bộ ảnh. LiteParse dùng backend `ocria-nano` với một worker CPU, trả văn bản thuần và giữ vùng chữ nhỏ. Gói model `1.0.0` được tải và kiểm tra checksum qua bộ cài LiteParse, theo giấy phép riêng của trọng số. Lượt đánh giá dùng máy cục bộ và có thể tắt mạng sau khi preload. [LiteParse](https://github.com/run-llama/liteparse#optional-ocria-nano-liteparses-own-models) · [Model và giấy phép](https://huggingface.co/llamaindex/OCRia-nano-1#license)
-
-```bash
-python -m pip install liteparse==2.21.3
-export LITEPARSE_MODEL_DIR="$PWD/eval/generated/ocria-nano-models"
-python eval/tools/check_ocr.py --preload --engines ocria-nano
-python eval/tools/check_ocr.py --dataset eval/dataset.jsonl --engines tesseract ocria-nano --output eval/generated/ocria-nano-dev.json
-python eval/tools/check_ocr.py --dataset eval/generated/dataset.smoke.jsonl --engines tesseract ocria-nano --output eval/generated/ocria-nano-smoke.json
-```
-
 ## Chuẩn bị dữ liệu sáu đầu vào
 
 Giữ bản gốc và dữ liệu có thông tin cá nhân ở nơi được cấp quyền. Mỗi bản dữ liệu đã rà có manifest ghi phiên bản, mô tả nguồn, mục đích được phép dùng, số mẫu mỗi nhãn, tỷ lệ tổng hợp và mã SHA-256 cho các tập. Lưu nhãn `scam` hoặc `legit`, nhóm thủ đoạn G1–G5 khi có, mã nhóm dùng khi tách tập, và vùng bằng chứng phù hợp với từng kênh. Gắn ca mơ hồ để chuyên viên rà trước khi chấm điểm chính thức.

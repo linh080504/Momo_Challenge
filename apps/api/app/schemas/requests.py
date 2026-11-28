@@ -8,6 +8,7 @@ class AnalyzeIn(BaseModel):
     image_base64: str | None = Field(default=None, description="Ảnh PNG/JPEG dạng Base64, tối đa 5 MiB trước mã hóa.")
     image_mime: str | None = Field(default=None, description="image/png hoặc image/jpeg, đi cùng image_base64.")
     image_kind: Literal["image", "receipt"] = Field(default="image", description="Ảnh chụp hoặc ảnh gốc biên lai.")
+    qwen_vision: bool = Field(default=False, description="Cho phép gửi ảnh chụp đến QwenCloud để đọc chữ.")
     audio_base64: str | None = Field(
         default=None, description="WAV PCM mono 16 bit, 16 kHz dạng Base64. Tối đa 45 giây, dùng thay ảnh đính kèm.",
     )

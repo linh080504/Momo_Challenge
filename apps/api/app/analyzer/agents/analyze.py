@@ -15,9 +15,10 @@ from ..signals.document import inspect_document
 from ..signals.knowledge import retrieve_guidance
 from ..signals.rules import BENIGN, match_rules
 from ..providers.fraud_url import FraudURL
-from ..providers.llm import PROMPT_VERSION, RISK, infer
+from ..providers.llm import PROMPT_VERSION, RISK, infer, screenshot_excerpts
 from ..providers.ocr import read_document, read_image
 from ..providers.speech import read_speech
+from ..providers.vision import read_screenshot
 
 QUESTIONS = [
     "Bạn đã gọi lại qua số lấy từ ứng dụng hoặc trang chính thức chưa?",
@@ -40,13 +41,22 @@ class Analyzer:
         inputs = ["text"] if text else []
         document = None
         screenshot_text = None
+        image_reader = None
         if image is not None:
             inputs.append(request.image_kind)
             if request.image_kind == "receipt":
                 recognized, boxes = read_document(image, self.settings)
                 document = inspect_document(image, request.image_mime, recognized, boxes)
             else:
-                recognized = read_image(image, self.settings)
+                recognized = None
+                if request.qwen_vision:
+                    yield {"stage": "image_vision", "message": "Qwen4-Max đang đọc ảnh chụp"}
+                    recognized = read_screenshot(image, self.settings, self.limits)
+                if recognized:
+                    image_reader = "qwen4-max"
+                else:
+                    recognized = read_image(image, self.settings)
+                    image_reader = "local_ocr_fallback" if request.qwen_vision else "local_ocr"
                 screenshot_text = recognized
             text = "\n".join(filter(None, [text, recognized]))
             yield {"stage": "image_read", "message": "Đã đọc chữ trong ảnh"}
@@ -154,9 +164,11 @@ class Analyzer:
                         add("website_content", "Trang có dấu hiệu mời cá cược kèm nạp tiền. Tránh gửi tiền hoặc thông tin cá nhân.", 35)
                     score = min(100, sum(item["weight"] for item in evidence))
         educational_article = article is not None and article["context"] == "educational"
-        scenario = matches[0][0].scenario if matches else ("G5.1" if worst_domain or found else None)
+        scenario = next((rule.scenario for rule, _ in matches if rule.scenario), "G5.1" if worst_domain or found else None)
         benign = bool(BENIGN.search(text))
-        familiar_message = benign and not entities and set(inputs) <= {"text", "image"}
+        context_matches = [(rule, quote) for rule, quote in matches if rule.points == 0]
+        needs_context = bool(context_matches)
+        familiar_message = benign and not needs_context and not entities and set(inputs) <= {"text", "image"}
         single_link_input = (inputs == ["url"] or
                              (inputs == ["text", "url"] and request.url is None and URL.fullmatch(text)) or
                              (inputs == ["qr", "url"] and request.url is None and qr is None))
@@ -166,7 +178,10 @@ class Analyzer:
             familiar_message or official_link or valid_vietqr or educational_article
         )
         confirmed = any(item["source"] == "internal_blacklist" for item in evidence)
-        needs_model = website_context is not None or (not low_from_checks and not confirmed and not (found and not matches) and score > 0)
+        image_excerpts = screenshot_excerpts(screenshot_text) if image_reader == "qwen4-max" else []
+        needs_model = bool(image_excerpts) or website_context is not None or (
+            not low_from_checks and not confirmed and not (found and not matches) and (score > 0 or needs_context)
+        )
         if low_from_checks and official_link:
             add("domain_check", "Địa chỉ trang chủ HTTPS khớp danh sách tên miền chính thức.", 0)
         if explanation_options:
@@ -174,19 +189,31 @@ class Analyzer:
             if picture := public_page.get("capture_jpeg") or (article or {}).get("capture_jpeg"):
                 stage["website_capture"] = {"jpeg": picture, "host": next(iter(domains))}
             yield stage
+        elif needs_model and self.settings.dashscope_api_key.get_secret_value().strip():
+            yield {"stage": "content_ai", "message": "Qwen4-Max đang đánh giá tín hiệu đã trích xuất"}
         guidance = retrieve_guidance(matches, bool(worst_domain or found), text)
         llm = infer(matches, evidence, benign, self.settings, self.limits, guidance, website_context,
-                    explanation_options) if needs_model else None
+                    explanation_options, image_excerpts=image_excerpts) if needs_model else None
         model = article["model"] if article and article["model"] else "rules"
         llm_level = None
+        image_flags = []
         if llm:
             model, llm_level, prediction, explanation = llm
             model_score = RISK[llm_level]
             if public_page and score <= 35:
                 model_score = min(model_score, max(score, RISK["uncertain"]))
             elif website_context is not None and score == 0:
-                # Unverified visual context can request further review. Existing evidence controls warning levels.
                 model_score = min(model_score, RISK["uncertain"])
+            elif image_excerpts:
+                if llm_level in ("medium", "high"):
+                    image_flags = explanation
+                # A model finding can prompt review when supported by a visible quote.
+                model_score = min(model_score, RISK["medium"]) if image_flags else 0
+            elif needs_context and score == 0:
+                # A topic match routes the message to Qwen without adding risk points.
+                model_score = 0
+            elif score < 45:
+                model_score = min(model_score, RISK["medium"])
             score = max(score, model_score)
             if llm_level != "low" and model_score >= 35:
                 scenario = prediction or scenario
@@ -198,16 +225,19 @@ class Analyzer:
             public_page["checked_at"] = int(time.time())
         level = (
             "high" if score >= 60 else "medium" if score >= 35 else
-            "low" if low_from_checks or (score <= 15 and llm_level == "low" and document is None
+            "low" if low_from_checks or (score <= 15 and llm_level == "low" and document is None and not needs_context
                                          and not markup_needs_review and website_context is None) else "uncertain"
         )
+        rule_flags = [{"quote": quote, "reason": rule.finding, "tactic": rule.tactic}
+                      for rule, quote in matches[:3] if rule.points > 0]
+        rule_tactics = {flag["tactic"] for flag in rule_flags}
         output = {
             "risk_level": level, "risk_score": score, "scenario_group": scenario.split(".")[0] if scenario else None,
             "scenario_id": scenario, "summary": ("Đã đọc bài viết từ nguồn chính thức. Các đề mục tập trung vào hướng dẫn "
                                                   "phòng tránh lừa đảo." if educational_article else LABELS[level]),
-            "red_flags": [{"quote": quote, "reason": rule.finding, "tactic": rule.tactic}
-                          for rule, quote in matches[:3]],
-            "verification_questions": QUESTIONS,
+            "red_flags": (rule_flags + [flag for flag in image_flags if flag["tactic"] not in rule_tactics])[:5],
+            "verification_questions": list(dict.fromkeys(
+                [rule.question for rule, _ in context_matches if rule.question] + QUESTIONS))[:3],
             "recommended_action": "no_action" if level == "low" else "stop_and_verify",
             "evidence": evidence, "entities": entities, "ai_disclaimer": DISCLAIMER,
             "model": model, "prompt_version": PROMPT_VERSION,
@@ -215,8 +245,12 @@ class Analyzer:
             "latency_ms": int((time.perf_counter() - start) * 1000),
             "degraded": (needs_model and llm is None) or bool(domains and not checked and not found),
         }
+        if context_matches:
+            output["content_context"] = [{"quote": quote, "reason": rule.finding} for rule, quote in context_matches[:3]]
         if document is not None:
             output["document"] = document
+        if image_reader:
+            output["image_reader"] = image_reader
         if domains:
             output["url_checks"] = [checked_destination(item) for item in domains.values()]
             output["website_report"] = build_report(domains, evidence, screenshot_text, checked, found, markup, self.settings)

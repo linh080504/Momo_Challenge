@@ -42,8 +42,11 @@ def test_mobile_screenshot_to_approved_alert():
         user = mobile.new_page()
         user.goto(WEB, wait_until="networkidle")
         user.get_by_role("tab", name="Ảnh chụp").click()
-        user.get_by_role("tabpanel", name="Ảnh chụp").get_by_label("Chọn ảnh PNG hoặc JPEG").set_input_files(screenshot_fixture())
-        user.get_by_role("button", name="Kiểm tra ngay").click()
+        screenshot = user.get_by_role("tabpanel", name="Ảnh chụp")
+        screenshot.get_by_label("Chọn ảnh PNG hoặc JPEG").set_input_files(screenshot_fixture())
+        with user.expect_request("**/v1/analyze/stream") as analysis_request:
+            screenshot.get_by_role("button", name="Kiểm tra ngay", exact=True).click()
+        assert analysis_request.value.post_data_json["qwen_vision"] is True
         playwright.expect(user).to_have_url(WEB + "/website")
         playwright.expect(user.get_by_role("heading", name="Nguy cơ cao")).to_be_visible(timeout=20000)
         assert user.evaluate("document.documentElement.scrollWidth === innerWidth")
@@ -61,6 +64,8 @@ def test_mobile_screenshot_to_approved_alert():
         operator.goto(WEB + "/ops", wait_until="networkidle")
         login(operator, os.environ["MVP_BROWSER_OPS_EMAIL"], os.environ["MVP_BROWSER_OPS_PASSWORD"])
         playwright.expect(operator.get_by_text("Báo cáo trong 24 giờ", exact=True)).to_be_visible()
+        operator.get_by_text("Cấu hình hệ thống", exact=True).click()
+        playwright.expect(operator.get_by_text("Phiên âm Whisper", exact=True)).to_be_visible()
         operator.get_by_role("link", name="Mạo danh cơ quan, tổ chức", exact=False).first.click()
         playwright.expect(operator.get_by_role("heading", name="Bàn điều tra đa tác nhân")).to_be_visible(timeout=35000)
         graph = operator.get_by_role("group", name="Bản đồ thực thể trong chiến dịch")
@@ -77,7 +82,7 @@ def test_mobile_screenshot_to_approved_alert():
         operator.get_by_text("Cảnh báo theo kênh", exact=True).click()
         playwright.expect(operator.get_by_text("Website · Đã bật cảnh báo khi kiểm tra trùng", exact=True)).to_be_visible()
         playwright.expect(operator.get_by_text("SMS · Bản xem trước", exact=True)).to_be_visible()
-        user.get_by_role("button", name="Kiểm tra ngay").click()
+        user.get_by_role("button", name="Kiểm tra ngay", exact=True).click()
         playwright.expect(user.get_by_text("Cảnh báo đã được chuyên viên xác nhận.", exact=True)).to_be_visible(timeout=20000)
         browser.close()
 
@@ -242,4 +247,20 @@ def test_mobile_speech_reaches_analysis_result():
         playwright.expect(page).to_have_url(WEB + "/website")
         playwright.expect(page.get_by_role("region", name="Kết quả phân tích")).to_be_visible(timeout=35000)
         assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+        browser.close()
+
+
+def test_audio_tab_checks_a_transcript_without_requiring_an_audio_file():
+    playwright = pytest.importorskip("playwright.sync_api")
+    with playwright.sync_playwright() as runner:
+        browser = runner.chromium.launch()
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        page.goto(WEB + "/website#kiem-tra-audio", wait_until="networkidle")
+        panel = page.get_by_role("tabpanel", name="Ghi âm", exact=True)
+        panel.get_by_text("Dán lời thoại hoặc thêm ngữ cảnh", exact=True).click()
+        panel.get_by_label("Lời thoại hoặc nội dung đi kèm").fill("Hãy chuyển ngay vào tài khoản tạm giữ.")
+        with page.expect_request("**/v1/analyze/stream") as call:
+            panel.get_by_role("button", name="Kiểm tra ngay", exact=True).click()
+        assert "audio_base64" not in call.value.post_data_json
+        playwright.expect(panel.get_by_role("region", name="Kết quả phân tích")).to_be_visible(timeout=20000)
         browser.close()

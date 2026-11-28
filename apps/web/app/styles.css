@@ -256,6 +256,7 @@ input::placeholder, textarea::placeholder { color: #786776; opacity: 1; }
 .website-sources { margin: 0 0 .65rem; }
 .website-sources > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .35rem .65rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
 .website-sources dt { font-size: .92rem; font-weight: 620; }
+.ops-system { margin: 1rem 1rem .35rem; }
 .website-status { margin: 0; padding: .2rem .44rem; border-radius: 7px; color: #4f4550; background: #f2edf0; font-size: .83rem; font-weight: 700; }
 .website-status-match { color: #8c1a30; background: #ffeded; }
 .website-status-checked, .website-status-clear { color: #23564e; background: #e8f5f0; }

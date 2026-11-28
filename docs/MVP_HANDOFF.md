@@ -1,21 +1,23 @@
 # Bàn giao PayPause AI
 
+MVP hiện dùng Qwen4-Max, bộ quy tắc, OCR cục bộ, Whisper có sẵn và các nguồn đối chiếu. Phản hồi do chuyên viên gán nhãn được dùng để kiểm tra chất lượng và rà quy tắc. Huấn luyện, fine-tune và kích hoạt model thử nghiệm nằm ngoài phạm vi bản bàn giao này.
+
 ## Phần người dùng
 
 | Đầu vào | Điểm vào | Nội dung cần nhìn thấy |
 | --- | --- | --- |
-| Tin nhắn | **Kiểm tra** | Dấu hiệu trong lời nhắn, mức rủi ro và câu hỏi kiểm chứng. |
-| Ảnh chụp | **Kiểm tra**, chọn ảnh tin nhắn | Tiến trình đọc chữ, các dấu hiệu đọc được và hành động tiếp theo. |
+| Tin nhắn | **Website → Tin nhắn** | Ngữ cảnh, dấu hiệu trong lời nhắn, mức rủi ro và câu hỏi kiểm chứng theo tình huống. |
+| Ảnh chụp | **Website → Ảnh chụp** | **Kiểm tra ngay** gửi ảnh đã chọn đến QwenCloud để đọc chữ và tiếp tục phân tích. Hệ thống dùng OCR cục bộ khi Qwen chưa đọc được ảnh. |
 | Website | **Website** | Nhận định từng đoạn của Qwen, ảnh chụp cuộn được, thời gian kiểm tra và kết quả từng nguồn. |
-| Mã QR | **VietQR** | Loại QR, tên miền hoặc ngân hàng, tài khoản đã che và tình trạng xác minh. |
-| Ghi âm | **Kiểm tra**, chọn ghi âm | Tiến trình phiên âm nếu Whisper đã bật. Khi nhận dạng gián đoạn, chuyển sang dán phần lời nhắn nghe được. |
-| Biên lai | **Kiểm tra**, chọn biên lai | Ảnh gốc, vùng OCR, sai khác nén nếu có và trạng thái giao dịch cần xác minh. |
+| Mã QR | **Website → Mã QR** hoặc **VietQR** | Loại QR, tên miền hoặc ngân hàng, tài khoản đã che và tình trạng xác minh. |
+| Ghi âm | **Website → Ghi âm** | Phiên âm bằng Whisper. Có thể dán lời thoại và bấm kiểm tra ngay trong cùng tab khi cần. |
+| Biên lai | **Website → Biên lai** | Ảnh gốc, vùng OCR, sai khác nén nếu có và trạng thái giao dịch cần xác minh. |
 
 **Hỏi người thân** tạo liên kết tóm tắt có hiệu lực 24 giờ. **Báo cáo** đưa tín hiệu đã che vào hồ sơ vận hành sau khi người dùng đồng ý.
 
 ## Phần vận hành
 
-1. Mở **Vận hành** bằng tài khoản ops. Tổng quan hiển thị số báo cáo và quyết định trong 24 giờ, cùng số hồ sơ đang chờ hoặc đã duyệt.
+1. Mở **Vận hành** bằng tài khoản ops. Tổng quan hiển thị số báo cáo và quyết định trong 24 giờ, cùng số hồ sơ đang chờ hoặc đã duyệt. Mục **Cấu hình hệ thống** cho biết phiên bản API, prompt, kho tri thức và các dịch vụ đã bật. Trạng thái cấu hình cần được kiểm chứng thêm bằng một lượt thử thực tế.
 2. Mở chiến dịch và chọn nút trên đồ thị để xem các thực thể đã ẩn danh. Cạnh giữa thực thể và đầu vào ghi số báo cáo có cả hai dữ kiện, kèm thời điểm gần nhất trong các báo cáo đã đọc.
 3. Mở **Gán nhãn báo cáo**, chọn *Lừa đảo*, *Hợp lệ*, *Cần xác minh* hoặc *Rút nhãn*, rồi xem lịch sử. Lưu nhãn và duyệt chiến dịch là hai thao tác độc lập. Với hồ sơ chờ duyệt có ít nhất hai báo cáo, chuyên viên có thể tách một báo cáo và mang theo lịch sử nhãn. Nếu bản ghi đã đổi ở phiên khác, tải lại trước khi sửa tiếp.
 4. Mở **Cảnh báo theo kênh**. Cảnh báo web xuất hiện khi một lần phân tích khớp thực thể của chiến dịch đã duyệt. Mẫu in-app, email, SMS và nội bộ có thể xem trong hồ sơ. Trạng thái biên lai là `unverified` đến khi có nguồn giao dịch được cấp quyền.
@@ -36,9 +38,9 @@
 | 3 · Bảo mật | Chuẩn hóa URL, đối chiếu nguồn, xác thực và che dữ liệu | Safe Browsing thật và kiểm tra egress ở môi trường đích |
 | 4 · Dữ liệu và nội dung | Mẫu tổng hợp, bộ SMS độc lập, bộ lọc trùng và thẻ tri thức có nguồn | Khóa holdout đại diện đa kênh, có quyền sử dụng |
 | 5 · Sáu đầu vào | Web và API cho tin nhắn, ảnh, website, QR, ghi âm và biên lai | |
-| 6 · Model chuyên biệt | Benchmark offline cho URL và SMS. Định tuyến URL dùng cổng hiện có | FraudBERT đa nhiệm, FraudDoc, FraudVoice và holdout theo từng tác vụ |
-| 7 · Kiểm định nghe nhìn | Các lượt so sánh OCR, Whisper local và vùng bằng chứng biên lai | Dữ liệu ASR giọng vùng miền, ảnh nén và vùng chỉnh sửa có nhãn |
-| 8 · Định tuyến và truy xuất | Fast/Deep Path, Qwen4-Max và truy xuất thẻ G1–G5 | So sánh các model ứng viên, embedding, reranker và chi phí |
+| 6 · Nhận diện chuyên biệt | Dùng các quy tắc theo ngữ cảnh, kiểm tra URL và nguồn đối chiếu | Kiểm chứng độ phủ trên holdout theo từng tác vụ |
+| 7 · Kiểm định nghe nhìn | OCR, Whisper và vùng bằng chứng biên lai | Dữ liệu ASR giọng vùng miền, ảnh nén và vùng chỉnh sửa có nhãn |
+| 8 · Định tuyến và truy xuất | Fast/Deep Path, Qwen4-Max, thẻ G1–G5 và câu hỏi theo tình huống | Đo tỷ lệ cảnh báo nhầm, độ trễ và chi phí trên tập đại diện |
 | 9 · Đồ thị | Gom và tách báo cáo, xem quan hệ theo báo cáo, kênh và thời điểm | Đo gộp/tách nhầm và hiệu chuẩn có holdout |
 | 10 · Workspace | Supervisor, sáu agent, tổng quan 24 giờ, bộ lọc và duyệt theo phiên bản | Đo hiệu quả thao tác với chuyên viên thật |
 | 11 · Cảnh báo | Cảnh báo web sau duyệt, mẫu nội dung bốn kênh và trạng thái `unverified` | Quyền đối tác gửi cảnh báo và xác minh giao dịch |

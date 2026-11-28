@@ -42,7 +42,8 @@ def evaluate(data, store, signer, settings, safe_browsing=None):
         checked, found = safe_browsing.lookup(domains) if safe_browsing else (False, False)
         community_match = any(item["lookup_allowed"] and community_domain_match(host) for host, item in domains.items())
         risk = "high" if flagged or found or any(item["level"] == "high" for item in domains.values()) else "medium" if (
-            community_match or match_rules(data.text) or any(item["level"] == "medium" for item in domains.values())
+            community_match or any(rule.points > 0 for rule, _ in match_rules(data.text))
+            or any(item["level"] == "medium" for item in domains.values())
         ) else "low" if destination["official_homepage"] and not data.text.strip() else "uncertain"
         link_evidence = checked_destination(destination)
         if community_match:
@@ -70,7 +71,9 @@ def evaluate_payment(payload, message, store, signer):
     mismatch = bool(mentioned and mentioned != {qr.account})
     keys, _, domains = extract(message, None, signer)
     flagged = store.matches({*keys, signer.digest("ACCOUNT", qr.account)})
-    suspicious_text = any(domain["level"] != "low" for domain in domains.values()) or bool(match_rules(message))
+    suspicious_text = any(domain["level"] != "low" for domain in domains.values()) or any(
+        rule.points > 0 for rule, _ in match_rules(message)
+    )
     risk = (
         "high" if flagged else "medium" if mismatch or not qr.valid_crc or suspicious_text
         else "low" if qr.bank_name else "uncertain"

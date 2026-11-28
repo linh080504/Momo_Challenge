@@ -143,6 +143,8 @@ def make_routes(settings, store, signer, limits, users, analyzer):
                     raise HTTPException(422, "Địa chỉ web không hợp lệ.") from exc
         if data.image_kind == "receipt" and data.image_base64 is None:
             raise HTTPException(422, "Hãy chọn ảnh biên lai.")
+        if data.qwen_vision and (not data.image_base64 or data.image_kind != "image" or data.url):
+            raise HTTPException(422, "Chọn ảnh ở mục Ảnh chụp để dùng Qwen đọc ảnh.")
         if data.audio_base64 is not None and data.image_base64 is not None:
             raise HTTPException(422, "Mỗi lượt kiểm tra hỗ trợ một tệp đính kèm.")
         if data.audio_base64 is None and data.qr_payload is None and not (data.text.strip() or data.url or data.image_base64):
@@ -212,7 +214,14 @@ def make_routes(settings, store, signer, limits, users, analyzer):
             "knowledge_version": KNOWLEDGE_VERSION,
             "qwen_model": QWEN_MODEL if settings.dashscope_api_key.get_secret_value().strip() else None,
             "safe_browsing_configured": bool(settings.safe_browsing_key),
+            "reputation_configured": {
+                "virustotal": bool(settings.virustotal_api_key.get_secret_value().strip()),
+                "urlhaus": bool(settings.urlhaus_feed_path),
+                "phishtank": bool(settings.phishtank_feed_path),
+                "rdap": settings.rdap_lookups_per_hour > 0,
+            },
             "speech_configured": bool(settings.whisper_command and settings.whisper_model_path),
+            "website_read_enabled": settings.website_public_html_enabled,
             "website_capture_enabled": settings.website_capture_enabled,
             "fraud_url_model": analyzer.fraud_url.version if analyzer.fraud_url else None,
         }

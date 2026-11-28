@@ -29,6 +29,8 @@ npm.cmd run dev --prefix apps/web
 
 ### Kiến trúc PayPause AI sau nâng cấp
 
+Bản MVP sử dụng model có sẵn và các nguồn bằng chứng. Các đề xuất huấn luyện trong bảng mô tả lộ trình lịch sử. [Phạm vi bàn giao hiện tại](docs/MVP_HANDOFF.md)
+
 | Tầng | Đã có trong ứng dụng | Hạng mục phát triển tiếp |
 | --- | --- | --- |
 | 1. Security & Trust Gateway | Kiểm tra kích thước, định dạng, URL và QR. Chuẩn hóa IDN, đối chiếu thương hiệu, phát hiện ký tự giống nhau và kiểm tra CRC VietQR. Đối chiếu thực thể lưu dạng HMAC với hồ sơ đã duyệt. Safe Browsing và RDAP chỉ nhận tên miền đủ điều kiện tại endpoint cố định. LLM chỉ nhận tín hiệu do ứng dụng tạo và không có quyền gọi công cụ. | Mở rộng nguồn đăng ký tên miền và nguồn threat intelligence đã cấp quyền. |
