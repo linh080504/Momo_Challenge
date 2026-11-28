@@ -124,9 +124,10 @@ def test_news_homepage_extracts_article_teasers_without_heading():
 
 @pytest.mark.parametrize("fenced", [False, True])
 def test_qwen_public_explanation_is_selected_from_verified_facts(monkeypatch, fenced):
-    html = ('<meta name="description" content="Community project https://example.com/private-marker">'
-            '<article><h1>Test article</h1><p>Our community project provides information and training to the '
-            'public. See https://example.com/private-article-marker for more.</p>'
+    html = ('<meta name="description" content="Community project example.com?session=bare-query-marker">'
+            '<article><h1>Test article example.com#bare-fragment-marker</h1>'
+            '<p>Our community project provides information and training to the '
+            'public. See https://example.com/private-article-marker and example.org/check?token=bare-path-marker for more.</p>'
             '<p>The project also brings together several reading groups and offers a library of materials.</p></article>')
     facts, _, title = public_page.parse_public_page(html, "https://example.com")
     facts["public_title"] = title
@@ -137,9 +138,9 @@ def test_qwen_public_explanation_is_selected_from_verified_facts(monkeypatch, fe
         assert "reason_ids" in instructions
         payload = json.loads(payload_json)
         assert set(payload["explanation_options"]) == set(options)
-        assert payload["website_context"]["public_html"]["public_title"] == "Test article"
-        assert "private-marker" not in payload_json
-        assert "private-article-marker" not in payload_json
+        assert payload["website_context"]["public_html"]["public_title"] == "Test article [URL]"
+        for marker in ("bare-query-marker", "bare-fragment-marker", "private-article-marker", "bare-path-marker"):
+            assert marker not in payload_json
         output = json.dumps({"risk_level": "uncertain", "scenario_id": None,
                              "page_purpose": "project_profile",
                              "content_analysis": [

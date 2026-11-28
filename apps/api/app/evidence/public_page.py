@@ -12,6 +12,7 @@ import httpx
 from PIL import Image
 
 from ..kit import pii_mask
+from ..privacy.entities import URL
 from .article_capture import capture_article
 from .brand_check import brand_claim
 from .url_gateway import inspect_url
@@ -36,7 +37,6 @@ ACCOUNT_REQUEST = re.compile(
 )
 EDUCATION = re.compile(r"\b(?:phòng tránh|cách nhận biết|dấu hiệu nhận biết|how to spot|avoid scams?)\b", re.I)
 RESTRICTED_PREVIEW = re.compile(r"\b(?:pornography|porn videos?|nội dung người lớn|phim khiêu dâm)\b", re.I)
-TEXT_URL = re.compile(r"(?:https?://|www\.)\S+", re.I)
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"}
 FONT_TYPES = {"font/woff2", "application/font-woff2", "application/font-woff", "application/octet-stream"}
 CSS_URL = re.compile(r"""url\(\s*['"]?([^'"()\s]+)['"]?\s*\)""", re.I)
@@ -46,6 +46,10 @@ SHARED_STATIC_HOSTS = {"cdn.jsdelivr.net", "cdnjs.cloudflare.com", "fonts.google
 PUBLISHER_STATIC_HOSTS = {
     "humanactprize.org": {"minisiteb.qltns.mediacdn.vn", "static.mediacdn.vn", "ims.mediacdn.vn"},
 }
+
+
+def public_text(text, limit):
+    return pii_mask.mask_text(URL.sub("[URL]", text))["masked"][:limit]
 
 
 class PublicPageMarkup(PageMarkup):
@@ -114,8 +118,7 @@ class PublicPageMarkup(PageMarkup):
             self.heading = None
         if tag == "p" and self.paragraph is not None:
             if len(self.paragraph) >= 60 and not (RESTRICTED_PREVIEW.search(self.paragraph) or GAMBLING.search(self.paragraph)):
-                excerpt = TEXT_URL.sub("[URL]", self.paragraph)
-                self.excerpts.append(pii_mask.mask_text(excerpt)["masked"][:440])
+                self.excerpts.append(public_text(self.paragraph, 440))
             self.paragraph = None
 
     def handle_startendtag(self, tag, attrs):
@@ -174,10 +177,9 @@ def parse_public_page(html, url):
     ) if facts[key]]
     # Omit promotional headers and mask personal data in read-only preview headings.
     hide_preview = bool(gambling_offer or (GAMBLING.search(heading) and not educational) or RESTRICTED_PREVIEW.search(heading))
-    title = None if hide_preview else pii_mask.mask_text(heading)["masked"][:140]
+    title = None if hide_preview else public_text(heading, 140)
     if title and reader.description and not RESTRICTED_PREVIEW.search(reader.description):
-        description = TEXT_URL.sub("[URL]", " ".join(reader.description.split()))
-        facts["public_description"] = pii_mask.mask_text(description)["masked"][:280]
+        facts["public_description"] = public_text(" ".join(reader.description.split()), 280)
     if title and reader.excerpts:
         facts["public_excerpts"] = reader.excerpts
     return facts, findings, title
@@ -402,7 +404,7 @@ def _read_public_page(url, *, capture):
         result = {"status": "read", "findings": findings, "title": title}
         facts["observed_host"] = urlsplit(origin).hostname
         if title:
-            facts["public_title"] = TEXT_URL.sub("[URL]", title)
+            facts["public_title"] = title
         if capture and title is not None:
             try:
                 assets = asyncio.run(_read_assets(html, origin))
