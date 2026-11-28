@@ -5,7 +5,16 @@ export type Entity = { type: string; display: string };
 export type Region = [number, number, number, number];
 export type UrlCheck = { host: string; level: "low" | "medium" | "high"; domain_age_days: number | null;
   domain_registered_on?: string | null; signals: string[]; official_brand?: string | null };
+export type BrandVerdict = "BENIGN" | "ABSTAIN_NEEDS_REVIEW" | "IMPOSTOR";
+export type BrandAssessment = { verdict: BrandVerdict; version: string; findings: string[] };
+export type BrandAlert = { host: string; finding: string };
+export type BrandSource = "CT_LOGS" | "CSKH_REPORT" | "QR_GATEWAY" | "THREAT_INTEL" | "QUICK_CHECK";
+export type BrandCase = {
+  host: string; state: CampaignState; revision: number; sources: Partial<Record<BrandSource, number>>;
+  assessment: BrandAssessment; created: number; updated: number; expires: number | null;
+};
 export type WebsiteReport = {
+  brand_review?: BrandAssessment & { source: "public_page" | "submitted_html" | "unavailable" };
   capture_scope?: "listed" | "unlisted";
   reputation?: Partial<Record<"virustotal" | "urlhaus" | "phishtank",
     { status: "match" | "clear" | "checked" | "unavailable"; scope: string }>>;
@@ -26,6 +35,16 @@ export type DocumentEvidence = {
   transaction_status: "unverified";
   notice: string;
 };
+export type TransferIntent = "receive" | "pay";
+export type TransferReview = {
+  intent: TransferIntent;
+  status: "conflict" | "payment" | "unreadable" | "invalid_crc" | "link" | "unsupported" | "unavailable";
+  amount?: string | null;
+  bank?: string | null;
+  account?: string;
+  quote?: string;
+  quote_source?: "message" | "image";
+};
 export type Analysis = {
   analysis_id: string;
   risk_level: Risk;
@@ -43,6 +62,8 @@ export type Analysis = {
   image_reader?: "qwen4-max" | "local_ocr" | "local_ocr_fallback";
   analysis_path?: "fast" | "deep";
   document?: DocumentEvidence;
+  transfer_review?: TransferReview;
+  brand_alert?: BrandAlert;
   url_checks?: UrlCheck[];
   website_report?: WebsiteReport;
   guidance?: { id: string; text: string; source_url?: string; version?: string }[];
@@ -64,6 +85,7 @@ export type Input = {
   qwen_vision?: boolean;
   audio_base64?: string;
   qr_payload?: string;
+  transfer_intent?: TransferIntent;
 };
 export type Account = { email: string; role: "user" | "ops" };
 export type Session = Account & { token: string };

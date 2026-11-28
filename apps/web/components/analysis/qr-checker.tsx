@@ -4,9 +4,10 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { ScanLine, ShieldCheck } from "lucide-react";
 import { Upload } from "@/components/analysis/upload";
-import { api, riskLabels, type Input, type Risk, type UrlCheck } from "@/lib/api";
+import { api, riskLabels, type BrandAlert, type Input, type Risk, type UrlCheck } from "@/lib/api";
 import { type QrDraft } from "@/lib/check-draft";
 import { imageInput } from "@/lib/images";
+import { BrandNotice } from "./brand-notice";
 
 type QrDetails = {
   kind: "payment";
@@ -19,7 +20,7 @@ type QrDetails = {
   confirmed_alert: boolean;
   risk: Risk;
   disclaimer: string;
-} | (UrlCheck & { kind: "url"; confirmed_alert: boolean; threat_intel_match: boolean; risk: Risk; disclaimer: string });
+} | (UrlCheck & { kind: "url"; confirmed_alert: boolean; threat_intel_match: boolean; risk: Risk; disclaimer: string; brand_alert?: BrandAlert | null });
 type QrInput = Input & { payload?: string };
 
 export function QrChecker({ embedded = false, headingLevel = "h1", initialDraft, onCheck }: {
@@ -118,9 +119,10 @@ export function QrChecker({ embedded = false, headingLevel = "h1", initialDraft,
       <div className="chips"><span className={"badge risk-" + result.risk}>{riskLabels[result.risk]}</span></div>
       <h2>QR liên kết</h2>
       <p>Tên miền đích <strong className="qr-host">{result.host}</strong></p>
-      {result.signals.length > 0 && <ul className="question-list">{result.signals.map(item => <li key={item}>{item}</li>)}</ul>}
+      {result.brand_alert && <BrandNotice alert={result.brand_alert} />}
+      {result.signals.length > 0 && <ul className="question-list">{result.signals.filter(item => item !== result.brand_alert?.finding).map(item => <li key={item}>{item}</li>)}</ul>}
       {result.threat_intel_match && <p className="notice">Google Safe Browsing ghi nhận tín hiệu nguy hiểm ở tên miền.</p>}
-      {result.confirmed_alert && <p className="notice verified"><ShieldCheck size={20} /> Cảnh báo đã được chuyên viên xác nhận.</p>}
+      {result.confirmed_alert && !result.brand_alert && <p className="notice verified"><ShieldCheck size={20} /> Cảnh báo đã được chuyên viên xác nhận.</p>}
       <p className="disclaimer">{result.disclaimer}</p>
     </section>}
     {result?.kind === "payment" && <section ref={resultElement} className="panel page-panel website-result-anchor">

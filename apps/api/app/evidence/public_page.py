@@ -13,6 +13,7 @@ from PIL import Image
 
 from ..kit import pii_mask
 from .article_capture import capture_article
+from .brand_check import brand_claim
 from .url_gateway import inspect_url
 from .website_report import PageMarkup
 
@@ -60,6 +61,9 @@ class PublicPageMarkup(PageMarkup):
         self.articles = 0
         self.article_depth = 0
         self.forms = 0
+        self.active_form = None
+        self.sensitive_inside_form = False
+        self.sensitive_external_form = False
         self.description = ""
         self.paragraph = None
         self.excerpts = []
@@ -78,11 +82,24 @@ class PublicPageMarkup(PageMarkup):
             self.article_depth += 1
         if tag == "form":
             self.forms += 1
+            if self.active_form is not None:
+                self.finish_form()
+            self.active_form = PageMarkup(None, host=self.host)
         if tag == "meta" and not self.description:
             fields = dict(attrs)
             if fields.get("name") == "description" or fields.get("property") == "og:description":
                 self.description = (fields.get("content") or "")[:600]
         super().handle_starttag(tag, attrs)
+        if self.active_form is not None:
+            self.active_form.handle_starttag(tag, attrs)
+
+    def finish_form(self):
+        if self.active_form is not None:
+            form = self.active_form
+            sensitive = form.password_field or form.verification_field or form.card_field
+            self.sensitive_inside_form |= sensitive
+            self.sensitive_external_form |= form.external_form and sensitive
+            self.active_form = None
 
     def handle_endtag(self, tag):
         if self.hidden:
@@ -91,6 +108,8 @@ class PublicPageMarkup(PageMarkup):
             return
         if tag == "article" and self.article_depth:
             self.article_depth -= 1
+        if tag == "form":
+            self.finish_form()
         if tag == self.heading:
             self.heading = None
         if tag == "p" and self.paragraph is not None:
@@ -120,6 +139,7 @@ def parse_public_page(html, url):
     reader = PublicPageMarkup(url)
     reader.feed(html)
     reader.close()
+    reader.finish_form()
     text = " ".join(reader.text)
     if not text:
         return None
@@ -128,7 +148,9 @@ def parse_public_page(html, url):
     gambling_offer = bool(GAMBLING.search(text) and DEPOSIT.search(text) and not educational)
     sensitive_form = reader.password_field or reader.verification_field or reader.card_field
     facts = {
+        "momo_heading_claim": brand_claim(heading),
         "sensitive_form": sensitive_form, "external_form": reader.external_form,
+        "sensitive_inside_form": reader.sensitive_inside_form, "sensitive_external_form": reader.sensitive_external_form,
         "account_request": sensitive_form and bool(ACCOUNT_REQUEST.search(text)),
         "meta_redirect": reader.meta_refresh, "gambling_offer": gambling_offer,
         "payment_incentive": bool(INCENTIVE.search(text) and DEPOSIT.search(text) and not educational),
@@ -378,6 +400,7 @@ def _read_public_page(url, *, capture):
             return {"status": "unavailable"}, None
         facts, findings, title = parsed
         result = {"status": "read", "findings": findings, "title": title}
+        facts["observed_host"] = urlsplit(origin).hostname
         if title:
             facts["public_title"] = TEXT_URL.sub("[URL]", title)
         if capture and title is not None:

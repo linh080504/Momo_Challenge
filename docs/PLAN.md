@@ -301,6 +301,73 @@ Bắt đầu từ bản PayPause AI đã chạy local. Mỗi bước có gói b�
 
 [Bàn giao MVP và điều kiện nghiệm thu từng bước](MVP_HANDOFF.md)
 
+## Kiểm tra trước khi xác nhận cho người dùng MoMo
+
+**Bài toán.** Khi đang chờ hoàn tiền hoặc xử lý đơn hàng, người dùng có thể nhận một mã QR qua Zalo, SMS hoặc sau cuộc gọi. Họ cần biết ngay thao tác tiếp theo sẽ khiến tiền đi đâu. MoMo đã có Nhãn người nhận ở bước chuyển khoản. PayPause bổ sung ngữ cảnh từ nội dung người dùng nhận được bên ngoài ví để giải thích vì sao yêu cầu đó đáng ngờ. [Nhãn người nhận và ví dụ dụ quét QR để lấy lại tiền](https://www.momo.vn/blog/nhan-nguoi-nhan-c198dt2858)
+
+### Luồng demo ưu tiên
+
+1. Trên PayPause, người dùng chọn **Tôi đang chờ nhận tiền** và gửi ảnh tin nhắn kèm mã QR mẫu. Nếu ảnh chứa cả hai, người dùng chỉ cần chọn một tệp.
+2. Qwen Vision đọc lời nhắn bằng `prompts/ocr_v0.md`. Bộ kiểm tra QR xác định loại mã và số tiền nếu có. Bộ đối chiếu so sánh mục đích người dùng đã chọn với hành động mà mã yêu cầu. Qwen giải thích dựa trên câu trích từ tin nhắn và kết quả giải mã. Khi thiếu bằng chứng, giao diện hiện **Chưa xác định được mã này dùng để làm gì** và cho thử ảnh rõ hơn hoặc vào Trợ giúp.
+3. Nếu dữ liệu mẫu cho thấy mã yêu cầu gửi 500.000 ₫, hiển thị **Bạn đang chờ nhận tiền. Nếu xác nhận, bạn sẽ chuyển đi 500.000 ₫.** Đặt **Dừng để xác minh** làm nút chính. Khi dừng, người dùng có thể mở **Trợ giúp MoMo** hoặc chọn **Hỏi người thân**. Nếu họ nói đã chuyển tiền, đưa lối vào Trợ giúp và kênh báo cáo chính thức lên trước. [Trợ giúp MoMo](https://www.momo.vn/hoi-dap) · [Kênh báo cáo lừa đảo](https://www.momo.vn/an-toan-bao-mat/bao-cao-lua-dao)
+
+### Vai trò của người dùng, AI và chuyên viên
+
+- Người dùng chọn mục đích giao dịch, xem bằng chứng và quyết định bước tiếp theo. Cảnh báo dùng câu ngắn, hiển thị được bằng trình đọc màn hình và có lối thoát ngay trên màn hình. Luồng mô phỏng giữ thao tác bình thường cho các ca không có mâu thuẫn hoặc tín hiệu rõ.
+- AI đọc nội dung người dùng chủ động gửi, trích bằng chứng và đề xuất thao tác phù hợp. Quy tắc quyết định khi nào hiện cảnh báo về mâu thuẫn giữa mục đích khai báo và thông tin đọc được từ mã. Ca mơ hồ giữ trạng thái **Cần xác minh**.
+- Người thân có thể xem bản tóm tắt hết hạn sau 24 giờ. Dùng luồng chia sẻ hiện có cho bản đầu. Nếu bổ sung lý do cảnh báo vào bản chia sẻ, cho người dùng xem trước và chỉ đưa tín hiệu đã che thông tin cá nhân.
+- Chuyên viên duyệt các báo cáo mà người dùng đồng ý gửi. Agent hỗ trợ gom các ca tương tự và soạn giải thích. Chuyên viên xác minh trước khi cập nhật quy tắc hoặc nội dung cảnh báo. Tái sử dụng Qwen4-Max, bộ kiểm tra QR và bàn làm việc vận hành của PayPause.
+
+### Thứ tự xây và tiêu chí nghiệm thu
+
+| Bước | Bàn giao | Cách kiểm tra |
+|---|---|---|
+| 1. Mô phỏng quyết định | Màn hình PayPause với lựa chọn mục đích, bằng chứng và cảnh báo ngay trước xác nhận mô phỏng | Thử QR yêu cầu chuyển tiền trong ngữ cảnh hoàn tiền, QR thanh toán bình thường và ảnh QR mờ. Cảnh báo đúng mâu thuẫn, ca bình thường đi tiếp, ca mờ có đường xác minh. |
+| 2. Kết nối người hỗ trợ | Nút Trợ giúp MoMo, chia sẻ tóm tắt, quy trình duyệt hồ sơ trong bàn làm việc vận hành | Mở đúng nguồn trợ giúp. Xác nhận bản chia sẻ hết hạn sau 24 giờ và người gửi thấy nội dung trước khi chia sẻ. Hồ sơ chỉ được tạo khi người dùng đồng ý. |
+| 3. Kiểm thử với người dùng | So sánh cách hiển thị điểm rủi ro hiện tại với cảnh báo chỉ rõ tiền sẽ chuyển đi hay về và bước tiếp theo | Thử với ít nhất 10 người dùng MoMo, đổi thứ tự hai giao diện và dùng các ca tương đương. Mục tiêu ban đầu là ít nhất 8/10 người tự nhận ra đang chuẩn bị gửi tiền và thời gian trung vị để chọn cách xác minh tối đa 20 giây. Ghi cả số người bị gián đoạn ở ca hợp lệ. Lưu kết quả vào `docs/USER_TESTS.md`. |
+| 4. Chuẩn bị thử nghiệm với MoMo | Đề xuất vị trí đặt tính năng, dữ liệu tối thiểu phải dùng và cách đo kết quả | Chỉ thử nghiệm trên luồng MoMo thật khi có thỏa thuận về quyền truy cập, bảo mật dữ liệu và phạm vi triển khai. Bản demo dùng dữ liệu giả lập. |
+
+Sau ca QR, ưu tiên thử ca giả danh hỗ trợ MoMo yêu cầu OTP qua cuộc gọi hoặc dẫn sang link ngoài. Cảnh báo trích đúng yêu cầu trong tin nhắn hay bản chép và đưa người dùng tới Trợ giúp chính thức. [Cảnh báo cuộc gọi mạo danh MoMo](https://www.momo.vn/blog/mao-danh-nhan-vien-momo-qua-cuoc-goi-cach-nhan-c198dt2675)
+
+## Phát hiện chủ động website mạo danh MoMo
+
+PayPause đã có cổng phân tích tên miền, RDAP, dữ liệu đối chiếu, ảnh xem trước, đọc biểu mẫu tĩnh và bàn làm việc chuyên viên. Mở rộng luồng này để phát hiện sớm trang giả mạo MoMo và nối kết quả đã duyệt về tính năng **Kiểm tra trước khi xác nhận**. Các bước dưới đây là đề xuất triển khai dựa trên mô tả BrandShield, dùng quy tắc, Qwen4-Max và mã nguồn PayPause hiện có. [Luồng URL hiện tại](STATUS.md#url-security-agent)
+
+### Nguồn ứng viên
+
+| Nguồn | Cách đưa vào PayPause |
+|---|---|
+| `QUICK_CHECK` | Tái sử dụng kiểm tra URL do người dùng nhập. |
+| `QR_GATEWAY` | Dùng tên miền từ QR liên kết và đích chuyển hướng công khai đã qua cổng kiểm tra. Giữ kết luận về chiều tiền của VietQR độc lập với đánh giá website. |
+| `CSKH_REPORT` | Dùng báo cáo PayPause có đồng ý của người gửi. Thử nguồn CSKH của MoMo bằng dữ liệu giả lập trước, rồi kết nối khi được cấp quyền. |
+| `THREAT_INTEL` | Tái sử dụng nguồn đã cấu hình. Ghi rõ nguồn nào khớp chính xác URL, nguồn nào chỉ đối chiếu tên miền và thời điểm dữ liệu được cập nhật. |
+| `CT_LOGS` | Bổ sung tác vụ đọc dữ liệu chứng chỉ công khai, lọc theo tên thương hiệu cần bảo vệ, gộp bản ghi trùng và đưa ứng viên vào hàng đợi chuyên viên. Chứng chỉ mới chỉ là tín hiệu để ưu tiên kiểm tra. [Certificate Transparency](https://www.rfc-editor.org/rfc/rfc9162.html) |
+
+### Ba nhóm bằng chứng và điều kiện kết luận
+
+1. **Tên miền.** Dùng lại Public Suffix List, quy tắc tên miền tương tự và RDAP. Thêm danh sách tên miền chính thức và đối tác đã xác minh, với người duyệt và ngày rà. Điểm tương đồng hoặc tuổi tên miền phục vụ xếp hàng và cần được đối chiếu với ngữ cảnh trang.
+2. **Giao diện.** Dùng ảnh người dùng gửi hoặc ảnh xem trước từ cổng thu thập theo phạm vi được phép. Qwen Vision hỗ trợ mô tả dấu hiệu nhận diện, như tên thương hiệu và lời yêu cầu xác minh tài khoản. Vị trí logo là hạng mục sau, chỉ hiển thị khi có vùng được kiểm chứng. Bảo vệ tác vụ thu thập bằng cô lập mạng và kiểm tra đích chuyển hướng, dùng phiên không có cookie người dùng, loại tham số nhạy cảm trước khi lưu và chỉ đọc các trang công khai trong phạm vi cho phép. [Hướng dẫn phòng SSRF của OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)
+3. **Biểu mẫu.** Dùng bộ đọc tĩnh hiện có để ghi nhận trường OTP, mật khẩu, dữ liệu thẻ và đích gửi biểu mẫu. Đối chiếu biểu mẫu với tên miền, mục đích trang và danh sách đã xác minh để giảm báo nhầm với đăng nhập hợp lệ hoặc bài viết cảnh báo. Bằng chứng lưu gồm loại trường và tên miền đích. Quy trình chỉ đọc biểu mẫu, không nhập hoặc gửi dữ liệu.
+
+Kết luận tự động dùng quy tắc có phiên bản và trả kèm nguồn bằng chứng. Qwen viết lời giải thích từ bằng chứng đã có. Chuyên viên lưu quyết định riêng cùng lý do và lịch sử duyệt.
+
+| Trạng thái | Điều kiện và hành động |
+|---|---|
+| `BENIGN` | Các kiểm tra bắt buộc đã chạy và chưa thấy dấu hiệu mạo danh. Giao diện ghi **Chưa thấy dấu hiệu mạo danh trong phạm vi kiểm tra**. |
+| `ABSTAIN_NEEDS_REVIEW` | Thiếu dữ liệu quan trọng, bằng chứng mâu thuẫn hoặc chỉ có tín hiệu yếu. Giao diện ghi **Cần xác minh** và chỉ rõ dữ kiện còn thiếu. |
+| `IMPOSTOR` | Có bằng chứng đủ mạnh về việc mượn danh thương hiệu và yêu cầu nhạy cảm, ví dụ giao diện tự nhận là MoMo trên miền ngoài danh mục đã xác minh và biểu mẫu gửi OTP đến miền không được xác minh. Ứng viên vào hàng duyệt. Chỉ quyết định đã duyệt mới kích hoạt cảnh báo trong PayPause. |
+
+### Thứ tự xây dựng
+
+| Bước | Bàn giao và kiểm tra |
+|---|---|
+| 1. Cổng kết luận có bằng chứng | Chạy ba trạng thái trên bộ ca gồm website chính thức, đối tác hợp lệ, bài báo nhắc MoMo, trang giả lập xin OTP và ca mất nguồn. Kiểm tra mỗi kết luận có căn cứ và nội dung Qwen không đổi trạng thái. |
+| 2. Phát hiện trước khi có báo cáo | Nhập lô chứng chỉ công khai mẫu và nguồn tình báo đã cấu hình, gộp tên miền trùng, lưu nguồn và đưa ứng viên có dấu hiệu vào hàng duyệt. Đo thời gian từ khi nhận ứng viên đến khi chuyên viên xem hồ sơ, số trùng và tỷ lệ chuyển duyệt. |
+| 3. Nối cảnh báo với người dùng | Chuyên viên xác minh một website giả lập. Khi người dùng gửi ảnh tin nhắn hoặc QR liên kết trỏ đến website đã duyệt, PayPause giải thích dấu hiệu và hiển thị **Dừng để xác minh** cùng Trợ giúp MoMo. Kiểm tra ca bị bác và ca đang chờ duyệt không phát cảnh báo cộng đồng. |
+| 4. Bàn giao cho đối tác | Chuẩn bị gói bằng chứng đã che, gồm tên miền, nguồn, thời điểm và lịch sử duyệt. Việc chia sẻ IOC, cập nhật danh sách chặn MoMo và gửi yêu cầu gỡ website cần thỏa thuận với đội vận hành có thẩm quyền. |
+
+**Đã thực hiện trong PayPause.** Cổng ba trạng thái, nhận lô theo năm nhãn nguồn, gộp theo hostname, đối chiếu HTML tĩnh và chữ từ ảnh, duyệt hoặc rút cảnh báo, xuất JSON và nối kết quả đã duyệt vào Website, VietQR và Kiểm tra trước khi xác nhận. Kiểm thử bao gồm trang chính thức, bài hướng dẫn, hồ sơ thiếu bằng chứng, nền tảng dùng chung, phân quyền và hết hạn cảnh báo. Nguồn CT chạy bằng lô đã xuất. Lịch thu thập CT trực tiếp và kết nối hệ thống MoMo thuộc bước triển khai với đối tác. [Hướng dẫn demo](MVP_HANDOFF.md#demo-phát-hiện-sớm-website-mạo-danh-momo)
+
 ---
 
 ## Prompt mẫu theo vai

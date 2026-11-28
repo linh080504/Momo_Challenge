@@ -47,6 +47,7 @@ export default function Home() {
               <a href="#quy-trinh" className="button secondary">Cách hoạt động</a>
             </div>
             <HomeChecker />
+            <Link href="/truoc-khi-xac-nhan" className="transfer-entry">Đang chờ nhận tiền? Kiểm tra mã QR</Link>
           </div>
           <PosterCarousel />
         </div>

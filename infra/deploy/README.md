@@ -19,6 +19,7 @@ Volume đã khởi tạo cần áp các migration mới thủ công. `MVP_TEST_P
 ```powershell
 $env:MVP_TEST_POSTGRES_URL = "postgresql://paypause_stage:$($env:PAYPAUSE_STAGE_POSTGRES_PASSWORD)@127.0.0.1:55432/paypause_stage"
 Get-Content -Raw infra/supabase/migrations/002_sample_reviews.sql | docker compose -p paypause-stage -f compose.yaml -f compose.staging.yaml exec -T postgres psql -U paypause_stage -d paypause_stage -v ON_ERROR_STOP=1
+Get-Content -Raw infra/supabase/migrations/003_brand_cases.sql | docker compose -p paypause-stage -f compose.yaml -f compose.staging.yaml exec -T postgres psql -U paypause_stage -d paypause_stage -v ON_ERROR_STOP=1
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
@@ -46,9 +47,19 @@ Preview cục bộ có thể bật `WEBSITE_CAPTURE_ENABLED=true` cho API sau kh
 
 Để thử ảnh chụp website và ghi âm trên cùng một API local, cài Chromium cho đúng môi trường Python và đặt đồng thời `WEBSITE_PUBLIC_HTML_ENABLED`, `WEBSITE_CAPTURE_ENABLED`, `WHISPER_COMMAND` và `WHISPER_MODEL_PATH`. Có thể dùng PostgreSQL trong Compose với API chạy trực tiếp trên máy. Web cần build với `NEXT_PUBLIC_API_URL` trỏ tới API đó, còn API cần có origin của web trong `ALLOWED_ORIGINS`. Tệp thực thi Whisper và trọng số được lấy từ bản phát hành có sẵn và giữ ngoài Git. [Bản phát hành Whisper có gói Windows x64](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.8.4)
 
+### Nhập ứng viên website mạo danh
+
+Màn hình **Vận hành → Phát hiện website mạo danh MoMo** nhận tối đa 100 URL hoặc hostname mỗi lô. Có thể dùng lệnh dưới đây để nhập định kỳ tệp xuất từ nguồn CT mà đội được phép sử dụng. Tệp văn bản có một URL hoặc hostname mỗi dòng. Với bản xuất JSON có trường `name_value` chứa tên trong chứng chỉ, thêm `--certificate-export`. Lệnh lấy mã phiên ops từ biến `PAYPAUSE_OPS_TOKEN` và gửi số liệu lô. Việc chạy định kỳ phụ thuộc lịch của môi trường triển khai.
+
+```powershell
+.\.venv\Scripts\python.exe eval/tools/import_brand_candidates.py ct-export.txt --source CT_LOGS --api http://127.0.0.1:8000
+```
+
+Cấu hình `MOMO_PARTNER_HOSTS` bằng hostname chính xác của các đối tác đã được xác minh, phân cách bằng dấu phẩy. Bản nhập chỉ lưu hostname và nguồn, dùng đối chiếu thụ động và gộp trùng trước khi chuyển chuyên viên.
+
 ## PostgreSQL và Supabase
 
-Chạy [migration 001](../supabase/migrations/001_mvp.sql) và [migration 002](../supabase/migrations/002_sample_reviews.sql) theo thứ tự bằng SQL Editor hoặc `psql`. Dùng kết nối PostgreSQL trực tiếp hoặc session pooler với TLS. API truy cập schema riêng `tkc` bằng `DATABASE_URL`. Đặt thông tin kết nối và `APP_SECRET` ổn định trong secret của nhà cung cấp. Secret thay đổi sẽ làm mất khả năng đối chiếu các định danh đã băm.
+Chạy lần lượt [migration 001](../supabase/migrations/001_mvp.sql), [migration 002](../supabase/migrations/002_sample_reviews.sql) và [migration 003](../supabase/migrations/003_brand_cases.sql) bằng SQL Editor hoặc `psql`. Dùng kết nối PostgreSQL trực tiếp hoặc session pooler với TLS. API truy cập schema riêng `tkc` bằng `DATABASE_URL`. Đặt thông tin kết nối và `APP_SECRET` ổn định trong secret của nhà cung cấp. Secret thay đổi sẽ làm mất khả năng đối chiếu các định danh đã băm.
 
 ## API ở Cloud Run
 

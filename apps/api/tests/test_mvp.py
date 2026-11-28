@@ -224,7 +224,7 @@ def test_public_input_contract_and_qr_result_variants(client):
     parse = paths["/v1/qr/parse"]["post"]
     inputs = ask["requestBody"]["content"]["application/json"]["schema"]["properties"]
     assert set(inputs) == {"text", "image_base64", "image_mime", "image_kind", "qwen_vision", "audio_base64", "qr_payload", "url",
-                           "website_html", "website_preview", "locale"}
+                           "website_html", "website_preview", "transfer_intent", "locale"}
     assert set(stream["responses"]["200"]["content"]) == {"application/x-ndjson"}
     variants = parse["responses"]["200"]["content"]["application/json"]["schema"]["discriminator"]
     assert variants["propertyName"] == "kind"
@@ -396,6 +396,169 @@ def test_qr_confirmation_mismatch_crc_and_decode(client):
     assert client.post("/v1/qr/parse", json=mismatch).json()["mismatch"]
     assert client.post("/v1/qr/build", json={**mismatch, "confirmed": True}).status_code == 409
     assert not client.post("/v1/qr/parse", json={"payload": payload[:-1] + ("0" if payload[-1] != "0" else "1")}).json()["valid_crc"]
+
+
+def test_transfer_review_reads_vietqr_and_message_from_the_same_image(configured, monkeypatch):
+    import qrcode
+
+    from app.analyzer.providers import llm
+
+    configured.dashscope_api_key = SecretStr("fake-qwen-key")
+    transcript = "Bạn nhận hoàn tiền 500.000 ₫. Vui lòng quét mã QR để xác nhận."
+
+    def reply(instructions, data, *_):
+        if isinstance(data, list):
+            assert "chép lại NGUYÊN VĂN" in instructions
+            assert data[0]["content"][1]["type"] == "input_image"
+            return transcript
+        return '{"risk_level":"low"}'
+
+    monkeypatch.setattr(llm, "_qwen_output", reply)
+    qr = qrcode.make(vietqr.build("970436", ACCOUNT, 500000)).get_image().convert("RGB")
+    screenshot = Image.new("RGB", (qr.width + 80, qr.height + 100), "white")
+    ImageDraw.Draw(screenshot).text((16, 16), transcript, fill="black")
+    screenshot.paste(qr, (40, 70))
+    body = {**image_body(screenshot), "transfer_intent": "receive", "qwen_vision": True}
+    with TestClient(create_app(configured)) as client:
+        headers = login(client, "user")
+        response = client.post("/v1/analyze/stream", json=body, headers=headers)
+        assert response.status_code == 200
+        events = [json.loads(line) for line in response.text.splitlines()]
+        assert [event["stage"] for event in events[:3]] == ["image_vision", "image_read", "qr_check"]
+        result = events[-1]["result"]
+        assert result["image_reader"] == "qwen4-max"
+        assert result["transfer_review"] == {
+            "intent": "receive", "status": "conflict", "amount": "500000", "bank": "Vietcombank",
+            "account": "••••2345", "quote": "nhận hoàn tiền", "quote_source": "image",
+        }
+        assert result["risk_level"] == "medium"
+        assert ACCOUNT not in response.text
+        proof = {"analysis_id": result["analysis_id"]}
+        share = client.post("/v1/shares", json=proof, headers=headers)
+        shared = client.get("/v1/shares/" + share.json()["token"])
+        assert "mã QR yêu cầu chuyển tiền đi" in shared.json()["summary"]
+        assert "500" not in shared.text and ACCOUNT not in shared.text and transcript not in shared.text
+        assert client.post("/v1/reports", json={**proof, "consent": False}, headers=headers).status_code == 422
+        campaign_id = report(client, headers, result)
+        operator = login(client, "ops")
+        campaign = client.get(f"/v1/ops/campaigns/{campaign_id}", headers=operator).json()
+        assert campaign["state"] == "pending"
+        assert any("VietQR yêu cầu chuyển tiền đi" in signal for signal in campaign["signals"])
+
+
+def test_transfer_review_keeps_valid_payment_and_unreadable_image_distinct(client, monkeypatch):
+    from app.analyzer.agents import analyze as agent
+    from app.analyzer.contract import AnalyzerError
+
+    def no_text(*_):
+        raise AnalyzerError(422, "Không có chữ")
+
+    monkeypatch.setattr(agent, "read_image", no_text)
+    payload = vietqr.build("970436", ACCOUNT)
+    normal = client.post("/v1/analyze", json={"transfer_intent": "pay", "qr_payload": payload}).json()
+    assert normal["transfer_review"]["status"] == "payment"
+    assert normal["transfer_review"]["amount"] is None and normal["risk_level"] == "low"
+    bad_crc = payload[:-1] + ("0" if payload[-1] != "0" else "1")
+    bad = client.post("/v1/analyze", json={"transfer_intent": "receive", "qr_payload": bad_crc}).json()
+    assert bad["transfer_review"] == {"intent": "receive", "status": "invalid_crc"}
+    for payload_text, expected in (("https://example.org/", "link"), ("QR khác định dạng", "unsupported")):
+        other = client.post("/v1/analyze", json={"transfer_intent": "receive", "qr_payload": payload_text}).json()
+        assert other["transfer_review"] == {"intent": "receive", "status": expected}
+        assert other["risk_level"] == "uncertain"
+    blank = image_body(Image.new("RGB", (120, 120), "white"))
+    unknown = client.post("/v1/analyze", json={**blank, "transfer_intent": "receive"}).json()
+    assert unknown["transfer_review"] == {"intent": "receive", "status": "unreadable"}
+    assert unknown["risk_level"] == "uncertain"
+    assert client.post("/v1/analyze", json={**blank, "qr_payload": payload, "transfer_intent": "receive"}).status_code == 422
+
+
+@pytest.mark.parametrize("db", ["sqlite", pytest.param("postgres", marks=pytest.mark.skipif(
+    not os.getenv("MVP_TEST_POSTGRES_URL"), reason="Requires isolated PostgreSQL with migration 003."
+))])
+def test_brand_queue_to_approved_warning_with_exact_scope_and_revocation(configured, monkeypatch, db):
+    import qrcode
+    import time
+    from app.evidence.brand_check import DEMO_HOST
+    from app.analyzer.providers import llm
+
+    if db == "postgres":
+        configured.database_url = os.environ["MVP_TEST_POSTGRES_URL"]
+    configured.dashscope_api_key = SecretStr("fake-qwen-key")
+
+    def qwen_reply(_instructions, content, *_):
+        if isinstance(content, list):
+            return f"Bạn nhận hoàn tiền. Mở https://{DEMO_HOST}/?session=sensitive-value."
+        return '{"risk_level":"low"}'
+
+    monkeypatch.setattr(llm, "_qwen_output", qwen_reply)
+    fixture = '<h1>MoMo xác minh hoàn tiền</h1><p>Nhập mã OTP.</p><form><input autocomplete="one-time-code"></form>'
+    root = "/v1/ops/brand-cases"
+    case = f"{root}/{DEMO_HOST}"
+    with TestClient(create_app(configured)) as client:
+        ops = login(client, "ops")
+        user = login(client, "user")
+        assert client.get(root).status_code == 401
+        assert client.get(root, headers=user).status_code == 403
+        batch = {"source": "CT_LOGS", "addresses": [
+            f"https://{DEMO_HOST}/?session=sensitive-value", DEMO_HOST, "momo.vn", "example.org",
+        ]}
+        assert client.post(root + "/intake", json=batch, headers=ops).json() == {"created": 1, "updated": 0, "matched": 1}
+        assert client.post(root + "/intake", json=batch, headers=ops).json() == {"created": 0, "updated": 0, "matched": 1}
+        assert client.post(root + "/intake", json={**batch, "source": "THREAT_INTEL"}, headers=ops).json() == {
+            "created": 1, "updated": 1, "matched": 2,
+        }
+        record = client.get(case + "/dossier", headers=ops).json()
+        assert record["assessment"]["verdict"] == "ABSTAIN_NEEDS_REVIEW"
+        assert set(record["sources"]) == {"CT_LOGS", "THREAT_INTEL"}
+        assert client.post(case + "/decision", json={"decision": "approve", "revision": record["revision"]}, headers=ops).status_code == 409
+
+        body = {"url": f"https://{DEMO_HOST}/", "website_html": fixture, "website_preview": True}
+        pre = client.post("/v1/analyze", json=body).json()
+        assert pre["website_report"]["brand_review"]["verdict"] == "IMPOSTOR"
+        assert pre["website_report"]["brand_review"]["source"] == "submitted_html"
+        assert "brand_alert" not in pre
+        assert client.post("/v1/qr/parse", json={"payload": body["url"]}).json()["brand_alert"] is None
+
+        response = client.post(case + "/evidence", json={"html": fixture, "revision": record["revision"]}, headers=ops)
+        assert response.status_code == 200 and response.json()["assessment"]["verdict"] == "IMPOSTOR"
+        revision = response.json()["revision"]
+        assert client.post(case + "/decision", json={"decision": "approve", "revision": revision - 1}, headers=ops).status_code == 409
+        approved = client.post(case + "/decision", json={"decision": "approve", "revision": revision}, headers=ops).json()
+        assert approved["state"] == "approved"
+        assert client.post("/v1/analyze", json=body).json()["brand_alert"]["host"] == DEMO_HOST
+        assert client.post("/v1/qr/parse", json={"payload": body["url"]}).json()["brand_alert"]["host"] == DEMO_HOST
+        assert client.post("/v1/qr/parse", json={"payload": f"https://other.{DEMO_HOST}/"}).json()["brand_alert"] is None
+        qr = qrcode.make(body["url"]).get_image().convert("RGB")
+        result = client.post("/v1/analyze", json={**image_body(qr), "transfer_intent": "receive", "qwen_vision": True}).json()
+        assert result["transfer_review"]["status"] == "link"
+        assert result["brand_alert"]["host"] == DEMO_HOST and result["risk_level"] == "high"
+        report = client.get(case + "/dossier", headers=ops)
+        assert report.json()["decisions"][0]["decision"] == "approve"
+        assert "sensitive-value" not in report.text and "<form>" not in report.text and "@" not in report.text
+        with monkeypatch.context() as clock:
+            clock.setattr(time, "time", lambda: approved["expires"] + 1)
+            assert client.post("/v1/qr/parse", json={"payload": body["url"]}).json()["brand_alert"] is None
+        revoked = client.post(case + "/decision", json={"decision": "revoke", "revision": approved["revision"]}, headers=ops)
+        assert revoked.status_code == 200
+        assert client.post("/v1/qr/parse", json={"payload": body["url"]}).json()["brand_alert"] is None
+
+
+@pytest.mark.parametrize(("host", "html", "verdict"), [
+    ("momo.vn", '<h1>Đăng nhập MoMo</h1><form><input type="password"></form>', "BENIGN"),
+    ("example.org", '<article><h1>Cách nhận biết lừa đảo MoMo</h1><p>Bài hướng dẫn.</p></article>', "BENIGN"),
+    ("example.org", '<h1>MoMo xác minh hoàn tiền</h1><p>Liên hệ hỗ trợ.</p>', "ABSTAIN_NEEDS_REVIEW"),
+    ("example.org", '<h1>MoMo xác minh</h1><form><input autocomplete="one-time-code"></form>'
+                    '<form action="https://example.net/"><input name="comment"></form>', "ABSTAIN_NEEDS_REVIEW"),
+    ("example.org", '<h1>MoMo xác minh</h1><form action="https://example.net/"><input autocomplete="one-time-code"></form>', "IMPOSTOR"),
+    ("sites.google.com", '<h1>MoMo xác minh</h1><form action="https://example.net/"><input autocomplete="one-time-code"></form>',
+     "ABSTAIN_NEEDS_REVIEW"),
+])
+def test_brand_verdict_requires_context_instead_of_isolated_signals(client, host, html, verdict):
+    response = client.post("/v1/analyze", json={"url": "https://" + host, "website_html": html, "website_preview": True})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["website_report"]["brand_review"]["verdict"] == verdict
+    assert "brand_alert" not in result
 
 
 def test_qwen_fallback_and_domain_lookup_never_send_input(configured, monkeypatch):

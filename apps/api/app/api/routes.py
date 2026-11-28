@@ -17,13 +17,19 @@ from ..analyzer.providers.llm import PROMPT_VERSION, QWEN_MODEL
 from ..analyzer.providers.ocr import image_for
 from ..analyzer.signals.knowledge import VERSION as KNOWLEDGE_VERSION
 from ..db.store import Login
+from ..db import brand_cases
+from ..evidence.brand_check import DEMO_HOST, candidate_domain, evaluate_brand, looks_like_momo, verified_hosts
+from ..evidence.public_page import parse_public_page
 from ..evidence.url_gateway import inspect_url
 from ..ops.alerts import alert_preview
 from ..ops.brief import brief
 from ..ops.investigation import run_workspace
 from ..qr.checks import evaluate, rebuild
 from ..reports.proof import issue_result
-from ..schemas.requests import AnalyzeIn, DecisionIn, LoginIn, ProofIn, QrIn, QrResult, ReportIn, ReviewIn, SampleReviewIn, SplitReportIn
+from ..schemas.requests import (
+    AnalyzeIn, BrandDecisionIn, BrandEvidenceIn, BrandIntakeIn, DecisionIn, LoginIn, ProofIn,
+    QrIn, QrResult, ReportIn, ReviewIn, SampleReviewIn, SplitReportIn,
+)
 from ..sharing.summaries import summary_for
 
 MAX_BODY_BYTES = 7_100_000
@@ -135,6 +141,11 @@ def make_routes(settings, store, signer, limits, users, analyzer):
             raise HTTPException(422, "Hãy nhập địa chỉ website và đoạn HTML cần kiểm tra.")
         if data.qr_payload is not None:
             data.qr_payload = data.qr_payload.strip()
+        if data.transfer_intent and (
+            data.url is not None or data.audio_base64 is not None or data.image_kind != "image"
+            or bool(data.qr_payload) == bool(data.image_base64)
+        ):
+            raise HTTPException(422, "Hãy chọn một ảnh chứa mã QR hoặc nhập nội dung mã để kiểm tra trước khi xác nhận.")
         for value in (data.url, data.qr_payload if (data.qr_payload or "").lower().startswith(("http://", "https://")) else None):
             if value is not None:
                 try:
@@ -143,8 +154,8 @@ def make_routes(settings, store, signer, limits, users, analyzer):
                     raise HTTPException(422, "Địa chỉ web không hợp lệ.") from exc
         if data.image_kind == "receipt" and data.image_base64 is None:
             raise HTTPException(422, "Hãy chọn ảnh biên lai.")
-        if data.qwen_vision and (not data.image_base64 or data.image_kind != "image" or data.url):
-            raise HTTPException(422, "Chọn ảnh ở mục Ảnh chụp để dùng Qwen đọc ảnh.")
+        if data.qwen_vision and (not data.image_base64 or data.image_kind != "image" or (data.url and not data.website_preview)):
+            raise HTTPException(422, "Hãy chọn ảnh chụp để dùng Qwen đọc ảnh.")
         if data.audio_base64 is not None and data.image_base64 is not None:
             raise HTTPException(422, "Mỗi lượt kiểm tra hỗ trợ một tệp đính kèm.")
         if data.audio_base64 is None and data.qr_payload is None and not (data.text.strip() or data.url or data.image_base64):
@@ -205,6 +216,63 @@ def make_routes(settings, store, signer, limits, users, analyzer):
     @router.get("/v1/ops/overview")
     def overview(_user=Depends(operator)):
         return store.overview()
+
+    @router.get("/v1/ops/brand-cases")
+    def list_brand_cases(state: Literal["pending", "approved", "rejected"] = "pending",
+                         after: Annotated[str, Query(max_length=253)] = "", _user=Depends(operator)):
+        return brand_cases.page(store, state, after)
+
+    @router.post("/v1/ops/brand-cases/intake")
+    def ingest_brand_cases(data: BrandIntakeIn, request: Request, user=Depends(operator)):
+        limit(request, "brand-intake", 12, user[0])
+        entries = {}
+        for value in data.addresses:
+            try:
+                # Certificate SAN wildcards identify a suffix, never a public wildcard match.
+                domain = candidate_domain(value.strip().removeprefix("*."))
+            except (ValueError, UnicodeError) as exc:
+                raise HTTPException(422, "Danh sách có địa chỉ không hợp lệ hoặc ngoài phạm vi.") from exc
+            host = domain["host"]
+            if host in verified_hosts(settings) or (
+                data.source == "CT_LOGS" and host != DEMO_HOST and not looks_like_momo(domain)
+            ):
+                continue
+            entries[host] = evaluate_brand(domain)
+        return brand_cases.ingest(store, entries, data.source)
+
+    @router.post("/v1/ops/brand-cases/{host}/evidence")
+    def review_brand_evidence(host: str, data: BrandEvidenceIn, request: Request, user=Depends(operator)):
+        limit(request, "brand-evidence", 20, user[0])
+        try:
+            domain = candidate_domain(host)
+            if domain["host"] != host:
+                raise ValueError("not a hostname")
+            parsed = parse_public_page(data.html, "https://" + host)
+        except (AssertionError, ValueError, UnicodeError) as exc:
+            raise HTTPException(422, "Không đọc được HTML hoặc tên miền không hợp lệ.") from exc
+        updated = brand_cases.set_evidence(
+            store, host, evaluate_brand(domain, parsed[0] if parsed else None, partner=host in verified_hosts(settings)),
+            data.revision,
+        )
+        if updated is None:
+            raise HTTPException(409, "Hồ sơ đã thay đổi hoặc đang phát cảnh báo. Hãy tải lại.")
+        return updated
+
+    @router.post("/v1/ops/brand-cases/{host}/decision")
+    def decide_brand_case(host: str, data: BrandDecisionIn, user=Depends(operator)):
+        if data.decision == "approve" and host in verified_hosts(settings):
+            raise HTTPException(409, "Tên miền thuộc danh mục đã xác minh.")
+        updated = brand_cases.decide(store, host, data.decision, data.revision, user[0])
+        if updated is None:
+            raise HTTPException(409, "Hồ sơ đã thay đổi hoặc chưa đủ điều kiện duyệt.")
+        return updated
+
+    @router.get("/v1/ops/brand-cases/{host}/dossier")
+    def export_brand_case(host: str, _user=Depends(operator)):
+        result = brand_cases.dossier(store, host)
+        if result is None:
+            raise HTTPException(404, "Không tìm thấy hồ sơ.")
+        return result
 
     @router.get("/v1/ops/system")
     def system_status(_user=Depends(operator)):
@@ -282,14 +350,17 @@ def make_routes(settings, store, signer, limits, users, analyzer):
     def create_share(data: ProofIn, request: Request, user=Depends(optional_identity)):
         limit(request, "share", 10)
         claim = proof(data.analysis_id, user)
-        return {"token": signer.issue("share", {"risk": claim["risk"]}, 86400)}
+        share_claim = {"risk": claim["risk"]}
+        if claim.get("reason") == "transfer_conflict":
+            share_claim["reason"] = claim["reason"]
+        return {"token": signer.issue("share", share_claim, 86400)}
 
     @router.get("/v1/shares/{token}")
     def read_share(token: str):
         claim = signer.read("share", token) if len(token) <= 512 else None
         if claim is None:
             raise HTTPException(404, "Liên kết không hợp lệ hoặc đã hết hạn.")
-        return summary_for(claim["risk"])
+        return summary_for(claim["risk"], claim.get("reason"))
 
     @router.post("/v1/qr/parse", openapi_extra=body_contract(QrIn), response_model=QrResult)
     async def parse_qr(request: Request):

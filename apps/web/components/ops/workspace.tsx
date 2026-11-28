@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Check, Inbox, LayoutGrid, RefreshCw, X } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
 import { InvestigationWorkspace } from "./investigation";
+import { BrandCases } from "./brand-cases";
 import { SampleReviewPanel } from "./sample-review";
 import {
   api, ApiError, currentSession, entityLabels, riskLabels, saveSession,
@@ -127,6 +128,10 @@ export function Workspace({ campaignId }: { campaignId?: string }) {
         <button type="button" className="button secondary" disabled={working} onClick={() => setReload(value => value + 1)}><RefreshCw size={18} />Tải lại</button>
       </div>
       {error && <p role="alert" className="error">{error}</p>}
+      {!campaignId && <details className="details brand-ops">
+        <summary>Phát hiện website mạo danh MoMo</summary>
+        <BrandCases token={session.token} />
+      </details>}
       {campaignId ? detail ? <section className="panel page-panel campaign-details">
         <div className="chips"><span className={"badge risk-" + detail.risk}>{riskLabels[detail.risk]}</span><span className="chip">{labels[detail.state]}</span></div>
         <h2>{detail.title}</h2>

@@ -5,6 +5,8 @@ from ..analyzer.contract import DISCLAIMER, AnalyzerError
 from ..analyzer.evidence.blacklist import lookup as community_domain_match
 from ..analyzer.signals.rules import match_rules
 from ..analyzer.providers.ocr import image_for
+from ..db.brand_cases import matching as matching_brand_cases
+from ..evidence.brand_check import APPROVED_FINDING, verified_hosts
 from ..evidence.url_gateway import checked_destination, inspect_url
 from ..kit import vietqr
 from ..media import media_slot, read_media
@@ -14,11 +16,16 @@ from ..privacy.entities import ACCOUNT, extract
 def decode_payload(data, settings):
     if data.payload:
         return data.payload
+    image = image_for(data)
+    if image is None:
+        raise AnalyzerError(422, "Hãy tải ảnh QR hoặc nhập chuỗi VietQR.")
+    return decode_qr_image(image, settings)
+
+
+def decode_qr_image(image, settings):
     try:
         with media_slot():
-            image = image_for(data)
-            if image is None:
-                raise AnalyzerError(422, "Hãy tải ảnh QR hoặc nhập chuỗi VietQR.")
+            image = image.copy()
             image.thumbnail((1800, 1800))
             payload = read_media("qr", image.convert("RGBA").tobytes(), settings,
                                  str(image.width), str(image.height), timeout=5)
@@ -38,7 +45,9 @@ def evaluate(data, store, signer, settings, safe_browsing=None):
             raise AnalyzerError(422, "Liên kết trong QR không hợp lệ.") from exc
         _, _, domains = extract(data.text, payload, signer)
         keys, _, _ = extract("", payload, signer)
-        flagged = store.matches(keys)
+        host = destination["host"]
+        brand_alert = host not in verified_hosts(settings) and bool(matching_brand_cases(store, {host}))
+        flagged = brand_alert or store.matches(keys)
         checked, found = safe_browsing.lookup(domains) if safe_browsing else (False, False)
         community_match = any(item["lookup_allowed"] and community_domain_match(host) for host, item in domains.items())
         risk = "high" if flagged or found or any(item["level"] == "high" for item in domains.values()) else "medium" if (
@@ -48,7 +57,10 @@ def evaluate(data, store, signer, settings, safe_browsing=None):
         link_evidence = checked_destination(destination)
         if community_match:
             link_evidence["signals"].append("Danh sách cảnh báo cộng đồng có tên miền trong nội dung đối chiếu.")
+        if brand_alert:
+            link_evidence["signals"].append(APPROVED_FINDING)
         return None, {**link_evidence, "kind": "url", "risk": risk, "confirmed_alert": flagged,
+                      "brand_alert": {"host": host, "finding": APPROVED_FINDING} if brand_alert else None,
                       "threat_intel_checked": checked, "threat_intel_match": found, "disclaimer": DISCLAIMER}
     return evaluate_payment(payload, data.text, store, signer)
 

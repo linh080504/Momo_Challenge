@@ -20,3 +20,20 @@ Kịch bản dưới đây là kế hoạch. Ghi kết quả từng buổi vào 
 | UT-09 · Dịch vụ gián đoạn | Mô phỏng Qwen, nguồn tra cứu hoặc ghi âm không khả dụng ở môi trường thử. | Với phân tích có thể tiếp tục bằng luật, ghi trạng thái hạn chế và cách người dùng xử lý. Với tệp cần bộ xử lý đang thiếu, ghi thông báo và hành động thay thế được hiểu. |
 
 Giữ mục tiêu ít nhất **10 người dùng thử**. Đo riêng quy trình thủ công và `/ops` trên **5 chiến dịch, mỗi chiến dịch 8–10 báo cáo**, ghi thời gian và số quyết định đúng. Xác nhận quy trình với một người có kinh nghiệm vận hành hoặc CSKH. Số liệu kiểm thử tự động và mẫu tổng hợp lưu ở STATUS hay báo cáo eval. [Chỉ số thành công](PRODUCT_BRIEF.md#5-chỉ-số-thành-công) · [Trạng thái kiểm thử tự động](STATUS.md#2026-11-27--bản-nâng-cấp-chạy-local)
+
+## Kiểm thử quyết định trước khi xác nhận
+
+Dùng ảnh và giao dịch giả lập để so sánh thẻ chấm điểm hiện tại với màn hình `/truoc-khi-xac-nhan`. Đổi thứ tự hai giao diện giữa người tham gia và dùng hai bộ ca tương đương. Bắt đầu tính thời gian khi kết quả xuất hiện. Hỏi trước khi gợi ý **Nếu bấm xác nhận thì tiền đi đâu? Bạn sẽ làm gì tiếp?**
+
+| Ca | Quan sát |
+|---|---|
+| Chờ hoàn tiền nhưng nhận VietQR chuyển khoản | Người dùng tự nhận ra tiền sẽ đi ra, chọn dừng hoặc xác minh qua kênh chính thức. |
+| Thanh toán bình thường | Người dùng nhận ra đây là lệnh trả tiền, kiểm tra người nhận và số tiền. Ghi số ca bị gián đoạn vì cảnh báo. |
+| Ảnh QR mờ hoặc chỉ có QR liên kết | Người dùng hiểu chưa xác định được giao dịch và biết chọn ảnh rõ hơn hoặc mở Trợ giúp. |
+
+| Mã người thử | Ca và giao diện | Nhận định về chiều tiền | Hành động đầu tiên | Số giây | Gián đoạn ở ca hợp lệ |
+|---|---|---|---|---|---|
+
+Mục tiêu thử nghiệm ban đầu là ít nhất 8/10 người tự nhận ra tiền sẽ chuyển đi trong ca hoàn tiền giả và thời gian trung vị chọn cách xác minh tối đa 20 giây. Ghi số người hoàn thành và số kết quả từng ca trước khi so sánh hai giao diện.
+
+Với ca QR liên kết đến hostname đã được chuyên viên duyệt, hỏi người thử **Vì sao bạn nên dừng lại? Bạn sẽ xác minh ở đâu?** Thử thêm ca hồ sơ còn chờ duyệt và bài viết cảnh báo có nhắc MoMo. Với vai chuyên viên, ghi thời gian từ lúc nhận ứng viên CT đến lúc xem đủ bằng chứng và quyết định. Dùng tình huống giả lập trong bàn giao để giữ điều kiện thử nhất quán. [Kịch bản vận hành](MVP_HANDOFF.md#demo-phát-hiện-sớm-website-mạo-danh-momo)

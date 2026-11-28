@@ -2,6 +2,7 @@ import { FileSearch, Globe2, ListChecks, RotateCw, ScanEye, Sparkles } from "luc
 import { useEffect, useState, type ReactNode } from "react";
 import { type Analysis, type WebsiteReport } from "@/lib/api";
 import { WebsiteSnapshot } from "./website-snapshot";
+import { brandLabels } from "./brand-notice";
 
 export type WebsiteRefresh = {
   busy: boolean;
@@ -43,6 +44,8 @@ export function WebsiteReportPanel({ result, image, banner, refresh }: {
   useEffect(() => {
     if (!image) return;
     const objectUrl = URL.createObjectURL(image);
+    // Synchronize the preview with the browser-managed object URL.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreview(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [image]);
@@ -63,6 +66,11 @@ export function WebsiteReportPanel({ result, image, banner, refresh }: {
       <h3><Sparkles size={21} aria-hidden="true" /> {result.model === "qwen4-max" ? "Kết quả phân tích của PayPause AI" : "Kết quả kiểm tra website"}</h3>
       {refresh?.busy && <p className="muted" role="status">Đang phân tích lại. Bên dưới là kết quả lần trước.</p>}
       {banner}
+      {report.brand_review && <details className="details" open={report.brand_review.verdict === "IMPOSTOR" || undefined}>
+        <summary>Kiểm tra mạo danh · {brandLabels[report.brand_review.verdict]}</summary>
+        {report.brand_review.source === "submitted_html" && <p className="muted">Dựa trên HTML đính kèm.</p>}
+        <ul className="question-list">{report.brand_review.findings.map(finding => <li key={finding}>{finding}</li>)}</ul>
+      </details>}
       {notes.length ? <div className="website-explanation">
         {articleNotes.length > 0 && <section aria-labelledby="website-article-title">
           <h4 id="website-article-title">AI phân tích nội dung trang</h4>

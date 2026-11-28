@@ -15,6 +15,23 @@ MVP hiện dùng Qwen4-Max, bộ quy tắc, OCR cục bộ, Whisper có sẵn v�
 
 **Hỏi người thân** tạo liên kết tóm tắt có hiệu lực 24 giờ. **Báo cáo** đưa tín hiệu đã che vào hồ sơ vận hành sau khi người dùng đồng ý.
 
+### Demo kiểm tra trước khi xác nhận cho người dùng MoMo
+
+1. Từ trang chủ hoặc trang **Website**, mở **Đang chờ nhận tiền? Kiểm tra mã QR** (`/truoc-khi-xac-nhan`). Chọn **Thử tình huống hoàn tiền** rồi bấm **Kiểm tra ngay** để thấy cảnh báo chuyển đi 500.000 ₫ từ dữ liệu giả lập. Màn hình demo hoạt động trong PayPause.
+2. Để thử đọc ảnh thật, chọn mục đích giao dịch và tải ảnh PNG/JPEG chứa mã VietQR. Nếu ảnh có lời nhắn, Qwen Vision dùng `prompts/ocr_v0.md` để đọc chữ. Nếu ảnh khó đọc hoặc Qwen gián đoạn, kết quả đọc VietQR vẫn được giữ để đối chiếu. Tin nhắn dán vào là tùy chọn.
+3. Mở **Dừng để xác minh**. **Hỏi người thân** hiển thị trước nội dung người nhận sẽ thấy, gồm mức rủi ro và bản tóm tắt, rồi mới cho chia sẻ liên kết 24 giờ. Với ảnh tải lên, người dùng đăng nhập và chủ động chọn **Báo cáo cho PayPause** để đưa tín hiệu vào bàn làm việc chuyên viên. Mục **Tôi đã chuyển tiền** dẫn đến kênh hỗ trợ và báo cáo của MoMo.
+
+[Kế hoạch triển khai và chỉ số](PLAN.md#kiểm-tra-trước-khi-xác-nhận-cho-người-dùng-momo) · [Phiếu kiểm thử với người dùng](USER_TESTS.md#kiểm-thử-quyết-định-trước-khi-xác-nhận)
+
+### Demo phát hiện sớm website mạo danh MoMo
+
+1. Đăng nhập **Vận hành**, mở **Phát hiện website mạo danh MoMo** → **Nhập ứng viên** → **Dùng tên miền mẫu** → **Thêm vào hàng duyệt**. Hồ sơ `momo-hoan-tien.example` xuất hiện từ nguồn CT ở trạng thái **Cần xác minh**. Đây là dữ liệu giả lập.
+2. Trong hồ sơ, mở **Đối chiếu HTML đã thu thập**, chọn **Dùng dữ liệu giả lập**, rồi bấm **Đối chiếu bằng chứng**. Mở phần bằng chứng để xác nhận trang dùng tên MoMo trong tiêu đề và có ô mã xác thực trước khi chọn **Duyệt cảnh báo MoMo**.
+3. Dán `https://momo-hoan-tien.example/` trong **Website** hoặc trong mục dán nội dung ở **VietQR**. PayPause hiển thị cảnh báo chuyên viên và lối vào Trợ giúp MoMo. Luồng **Kiểm tra trước khi xác nhận** cũng tra cùng hồ sơ nếu ảnh hoặc QR chứa tên miền đã duyệt. Dữ liệu mẫu không cần mở website.
+4. Tại **Đã duyệt**, chọn **Xuất hồ sơ** để lấy bằng chứng JSON và lịch sử quyết định, hoặc **Rút cảnh báo** rồi kiểm tra lại. Cảnh báo tự hết hiệu lực sau 30 ngày và chỉ áp dụng cho đúng hostname đã duyệt.
+
+Danh sách nhận năm loại nguồn. Nhật ký chứng chỉ và dữ liệu bên ngoài được nhập theo lô đã xuất từ nguồn được phép. [Cấu hình và nhập lô](../infra/deploy/README.md#nhập-ứng-viên-website-mạo-danh) · [Kế hoạch phát hiện chủ động](PLAN.md#phát-hiện-chủ-động-website-mạo-danh-momo)
+
 ## Phần vận hành
 
 1. Mở **Vận hành** bằng tài khoản ops. Tổng quan hiển thị số báo cáo và quyết định trong 24 giờ, cùng số hồ sơ đang chờ hoặc đã duyệt. Mục **Cấu hình hệ thống** cho biết phiên bản API, prompt, kho tri thức và các dịch vụ đã bật. Trạng thái cấu hình cần được kiểm chứng thêm bằng một lượt thử thực tế.

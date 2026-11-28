@@ -4,6 +4,7 @@ from uuid import uuid4
 def issue_result(event, signer, owner):
     result = event["result"]
     document = result.get("document")
+    transfer = result.get("transfer_review")
     forensics = ({"ocr_regions": len(document["ocr_boxes"]), "jpeg_regions": len(document["recompression_regions"])}
                  if document else {})
     result["analysis_id"] = signer.issue("analysis", {
@@ -13,5 +14,6 @@ def issue_result(event, signer, owner):
         "forensics": forensics,
         "sources": sorted({item["source"] for item in result["evidence"] if item["weight"] > 0}),
         "signals": [item["finding"] for item in result["evidence"] if item["weight"] > 0][:6],
+        **({"reason": "transfer_conflict"} if transfer and transfer["status"] == "conflict" else {}),
     }, 1800)
     return result

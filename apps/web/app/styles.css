@@ -286,6 +286,29 @@ summary { cursor: pointer; color: var(--primary-dark); font-weight: 700; }
 .narrow { max-width: 650px; }
 .page-panel { display: grid; gap: .9rem; }
 .narrow .panel + .panel { margin-top: 1rem; }
+.main-content > .transfer-page { max-width: 760px; }
+.transfer-entry { display: inline-flex; margin-top: .85rem; font-weight: 700; }
+.transfer-intents { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: .65rem; min-width: 0; border: 0; margin: 0; padding: 0; }
+.transfer-intents legend { font-weight: 750; margin-bottom: .55rem; }
+.transfer-intent { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; padding: .65rem .75rem; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; }
+.transfer-intent[data-selected="true"] { background: var(--tint); border-color: var(--primary); color: var(--primary-dark); }
+.transfer-intent input[type="radio"] { accent-color: var(--primary); margin: 0; width: 1rem; height: 1rem; }
+.transfer-outcome { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem; border-radius: 12px; background: #f1eef5; }
+.transfer-outcome > svg { flex: none; }
+.transfer-outcome .stack { gap: .3rem; }
+.transfer-result[data-tone="warning"] .transfer-outcome { background: #ffece8; color: #8c2633; }
+.transfer-result[data-tone="payment"] .transfer-outcome { background: #eaf6f1; color: #234b40; }
+.transfer-direction { font-size: clamp(1.15rem, 3vw, 1.5rem); font-weight: 750; }
+.transfer-result h2 { scroll-margin-top: 10rem; }
+.transfer-quote { border-inline-start: 3px solid #e9bdd4; padding-inline-start: .8rem; }
+.transfer-quote blockquote { margin: .2rem 0 0; }
+.transfer-sent summary { cursor: pointer; font-weight: 750; color: var(--primary-dark); }
+.transfer-sent[open] > :not(summary), .transfer-support { margin-top: .8rem; }
+.transfer-verify summary { width: fit-content; }
+.transfer-verify summary::-webkit-details-marker { display: none; }
+.brand-ops { margin-bottom: 1rem; }
+.brand-ops > .brand-queue { margin-top: .75rem; }
+.brand-queue > .panel-heading { margin-bottom: 0; }
 .page-heading { display: flex; gap: .8rem; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .page-heading p { margin-top: .5rem; }
 .breadcrumb { font-size: .95rem; font-weight: 700; }

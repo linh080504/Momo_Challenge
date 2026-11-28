@@ -34,9 +34,9 @@ def source_status(checked, found):
 
 
 class PageMarkup(HTMLParser):
-    def __init__(self, url):
+    def __init__(self, url, *, host=None):
         super().__init__()
-        self.host = inspect_url(url)["host"]
+        self.host = host if host is not None else inspect_url(url)["host"]
         self.password_field = False
         self.verification_field = False
         self.card_field = False

@@ -8,5 +8,7 @@ SUMMARIES = {
 }
 
 
-def summary_for(risk):
-    return {"risk": risk, "summary": SUMMARIES[risk], "disclaimer": DISCLAIMER}
+def summary_for(risk, reason=None):
+    summary = ("Người gửi đang chờ nhận tiền nhưng mã QR yêu cầu chuyển tiền đi. Hãy cùng xác minh qua kênh chính thức."
+               if reason == "transfer_conflict" else SUMMARIES[risk])
+    return {"risk": risk, "summary": summary, "disclaimer": DISCLAIMER}

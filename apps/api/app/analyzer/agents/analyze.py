@@ -1,7 +1,9 @@
 import time
 
+from ...db.brand_cases import matching as matching_brand_cases
+from ...evidence.brand_check import APPROVED_FINDING, describe_brand, evaluate_brand, verified_hosts
 from ...evidence.public_article import PUBLIC_ARTICLES, read_public_article
-from ...evidence.public_page import read_public_page
+from ...evidence.public_page import parse_public_page, read_public_page
 from ...evidence.rdap import lookup_age
 from ...evidence.reputation import NAMES, check_reputation
 from ...evidence.url_gateway import checked_destination
@@ -9,7 +11,8 @@ from ...evidence.website_report import build_report, credential_labels, markup_s
 from ...evidence.website_explanation import public_explanation_options
 from ...privacy.entities import URL, extract
 from ...qr.checks import evaluate_payment
-from ..contract import DISCLAIMER, LABELS, VALIDATOR
+from ...qr.payment_review import CONFLICT_REASON, review_payment
+from ..contract import DISCLAIMER, LABELS, VALIDATOR, AnalyzerError
 from ..evidence.blacklist import lookup as community_domain_match
 from ..signals.document import inspect_document
 from ..signals.knowledge import retrieve_guidance
@@ -42,6 +45,7 @@ class Analyzer:
         document = None
         screenshot_text = None
         image_reader = None
+        transfer_review = None
         if image is not None:
             inputs.append(request.image_kind)
             if request.image_kind == "receipt":
@@ -55,18 +59,34 @@ class Analyzer:
                 if recognized:
                     image_reader = "qwen4-max"
                 else:
-                    recognized = read_image(image, self.settings)
-                    image_reader = "local_ocr_fallback" if request.qwen_vision else "local_ocr"
+                    try:
+                        recognized = read_image(image, self.settings)
+                        image_reader = "local_ocr_fallback" if request.qwen_vision else "local_ocr"
+                    except AnalyzerError as exc:
+                        if not (request.transfer_intent or request.url and request.website_preview) or exc.status not in (422, 429, 503):
+                            raise
                 screenshot_text = recognized
             text = "\n".join(filter(None, [text, recognized]))
-            yield {"stage": "image_read", "message": "Đã đọc chữ trong ảnh"}
+            if recognized:
+                yield {"stage": "image_read", "message": "Đã đọc chữ trong ảnh"}
         if request.audio_base64:
             inputs.append("audio")
             text = "\n".join(filter(None, [text, read_speech(request.audio_base64, self.settings)]))
             yield {"stage": "audio_read", "message": "Đã nhận dạng lời nói"}
         qr = None
         supplement = text
-        if request.qr_payload:
+        qr_link = None
+        if request.transfer_intent:
+            yield {"stage": "qr_check", "message": "Đang kiểm tra mã QR và mục đích giao dịch"}
+            transfer_review, qr, payment, qr_link = review_payment(
+                request.transfer_intent, request.qr_payload, image, request.text, screenshot_text,
+                self.store, self.signer, self.settings,
+            )
+            if qr or qr_link:
+                inputs.append("qr")
+            if qr_link:
+                supplement += "\n" + qr_link
+        elif request.qr_payload:
             inputs.append("qr")
             if request.qr_payload.lower().startswith(("https://", "http://")):
                 supplement += "\n" + request.qr_payload
@@ -91,6 +111,10 @@ class Analyzer:
 
         if self.store.matches(keys):
             add("internal_blacklist", "Trùng thông tin trong một chiến dịch đã được chuyên viên duyệt.", 60)
+        trusted_brand_hosts = verified_hosts(self.settings)
+        brand_matches = matching_brand_cases(self.store, set(domains) - trusted_brand_hosts)
+        if brand_matches:
+            add("internal_blacklist", APPROVED_FINDING, 60)
         worst_domain = max(({"low": 0, "medium": 20, "high": 45}[value["level"]]
                             for value in domains.values()), default=0)
         if worst_domain:
@@ -104,6 +128,8 @@ class Analyzer:
             add("vietqr", "Đã đọc cấu trúc VietQR. Hãy đối chiếu người nhận và số tiền.", 0)
             if not qr.valid_crc or payment["mismatch"]:
                 add("vietqr", "Mã kiểm tra hoặc tài khoản trong QR không khớp.", 40)
+        if transfer_review and transfer_review["status"] == "conflict":
+            add("vietqr", CONFLICT_REASON, 45)
         checked, found = self.safe_browsing.lookup(domains)
         if found:
             add("safe_browsing", "Google Safe Browsing ghi nhận tín hiệu nguy hiểm ở tên miền.", 60)
@@ -139,6 +165,7 @@ class Analyzer:
         score = min(100, sum(item["weight"] for item in evidence))
         article = None
         public_page = None
+        public_facts = None
         explanation_options = None
         if explicit_website and inputs == ["url"] and markup is None:
             target = request.url.strip()
@@ -155,7 +182,14 @@ class Analyzer:
                 if public_page["status"] == "redirect":
                     add("website_content", "Trang chuyển hướng ngoài phạm vi kiểm tra. Đích cuối chưa được xác minh.", 0)
                 if public_facts:
-                    website_context = {"public_html": public_facts}
+                    observed_host = public_facts.get("observed_host")
+                    if observed_host and observed_host not in trusted_brand_hosts:
+                        new_matches = matching_brand_cases(self.store, {observed_host}) - brand_matches
+                        if new_matches:
+                            brand_matches.update(new_matches)
+                            if not any(item["finding"] == APPROVED_FINDING for item in evidence):
+                                add("internal_blacklist", APPROVED_FINDING, 60)
+                    website_context = {"public_html": {key: value for key, value in public_facts.items() if key != "observed_host"}}
                     explanation_options = public_explanation_options(public_facts, next(iter(domains.values())),
                                                                     checked or found, evidence)
                     if public_facts["sensitive_form"] and public_facts["external_form"]:
@@ -173,7 +207,9 @@ class Analyzer:
                              (inputs == ["text", "url"] and request.url is None and URL.fullmatch(text)) or
                              (inputs == ["qr", "url"] and request.url is None and qr is None))
         official_link = single_link_input and len(domains) == 1 and next(iter(domains.values()))["official_homepage"]
-        valid_vietqr = inputs == ["qr"] and qr is not None and payment["risk"] == "low"
+        valid_vietqr = qr is not None and payment["risk"] == "low" and (
+            inputs == ["qr"] or bool(transfer_review and transfer_review["status"] == "payment" and not needs_context)
+        )
         low_from_checks = score == 0 and not markup_needs_review and (
             familiar_message or official_link or valid_vietqr or educational_article
         )
@@ -228,6 +264,8 @@ class Analyzer:
             "low" if low_from_checks or (score <= 15 and llm_level == "low" and document is None and not needs_context
                                          and not markup_needs_review and website_context is None) else "uncertain"
         )
+        if level == "low" and transfer_review and transfer_review["status"] != "payment":
+            level = "uncertain"
         rule_flags = [{"quote": quote, "reason": rule.finding, "tactic": rule.tactic}
                       for rule, quote in matches[:3] if rule.points > 0]
         rule_tactics = {flag["tactic"] for flag in rule_flags}
@@ -251,6 +289,10 @@ class Analyzer:
             output["document"] = document
         if image_reader:
             output["image_reader"] = image_reader
+        if transfer_review:
+            output["transfer_review"] = transfer_review
+        if brand_matches:
+            output["brand_alert"] = {"host": sorted(brand_matches)[0], "finding": APPROVED_FINDING}
         if domains:
             output["url_checks"] = [checked_destination(item) for item in domains.values()]
             output["website_report"] = build_report(domains, evidence, screenshot_text, checked, found, markup, self.settings)
@@ -258,6 +300,22 @@ class Analyzer:
                 output["website_report"]["article"] = article
             if explicit_website:
                 output["website_report"]["capture_scope"] = "listed" if request.url.strip() in PUBLIC_ARTICLES else "unlisted"
+                domain = next(iter(domains.values()))
+                facts = public_facts
+                proof_source = "public_page" if facts else "unavailable"
+                if facts and facts.get("observed_host") not in (None, domain["host"]):
+                    facts = None
+                    proof_source = "unavailable"
+                if request.website_html and markup and markup["status"] == "checked":
+                    parsed = parse_public_page(request.website_html, request.url)
+                    if parsed:
+                        facts, _, _ = parsed
+                        proof_source = "submitted_html"
+                output["website_report"]["brand_review"] = {
+                    **describe_brand(evaluate_brand(domain, facts, screenshot_text,
+                                                   partner=domain["host"] in trusted_brand_hosts)),
+                    "source": proof_source,
+                }
             if reputation:
                 output["website_report"]["reputation"] = reputation
             if public_page:

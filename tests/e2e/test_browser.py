@@ -106,6 +106,93 @@ def test_desktop_receipt_and_qr_link():
         browser.close()
 
 
+def test_brand_ops_demo_publishes_and_revokes_exact_qr_warning():
+    playwright = pytest.importorskip("playwright.sync_api")
+    with playwright.sync_playwright() as runner:
+        browser = runner.chromium.launch()
+        operator = browser.new_page(viewport={"width": 1280, "height": 900})
+        operator.goto(WEB + "/ops", wait_until="networkidle")
+        login(operator, os.environ["MVP_BROWSER_OPS_EMAIL"], os.environ["MVP_BROWSER_OPS_PASSWORD"])
+        operator.get_by_text("Phát hiện website mạo danh MoMo", exact=True).click()
+        operator.get_by_text("Nhập ứng viên", exact=True).click()
+        operator.get_by_role("button", name="Dùng tên miền mẫu").click()
+        operator.get_by_role("button", name="Thêm vào hàng duyệt").click()
+        host = operator.get_by_role("heading", name="momo-hoan-tien.example")
+        playwright.expect(host).to_be_visible()
+        card = operator.locator(".brand-queue article").filter(has=host)
+        playwright.expect(card.get_by_text("Cần xác minh", exact=False)).to_be_visible()
+        card.get_by_text("Đối chiếu HTML đã thu thập").click()
+        card.get_by_role("button", name="Dùng dữ liệu giả lập").click()
+        card.get_by_role("button", name="Đối chiếu bằng chứng").click()
+        card.get_by_role("button", name="Duyệt cảnh báo MoMo").click()
+        playwright.expect(host).to_have_count(0)
+
+        user = browser.new_page(viewport={"width": 390, "height": 844})
+        user.goto(WEB + "/qr", wait_until="networkidle")
+        link = user.get_by_label("Hoặc dán nội dung QR")
+        check = user.get_by_role("button", name="Kiểm tra mã", exact=True)
+        warning = user.get_by_text("Chuyên viên PayPause đã xác nhận website mạo danh MoMo.")
+        link.fill("https://momo-hoan-tien.example/")
+        check.click()
+        playwright.expect(warning).to_be_visible()
+        assert user.evaluate("document.documentElement.scrollWidth === innerWidth")
+
+        operator.get_by_label("Trạng thái hồ sơ").select_option("approved")
+        with operator.expect_download() as download:
+            card.get_by_role("button", name="Xuất hồ sơ").click()
+        assert download.value.suggested_filename == "momo-hoan-tien.example.json"
+        card.get_by_role("button", name="Rút cảnh báo").click()
+        playwright.expect(host).to_have_count(0)
+        check.click()
+        playwright.expect(user.get_by_role("heading", name="QR liên kết")).to_be_visible()
+        playwright.expect(warning).to_have_count(0)
+        browser.close()
+
+
+def test_transfer_confirmation_distinguishes_mismatch_payment_and_unreadable_qr():
+    import qrcode
+
+    from app.kit import vietqr
+
+    playwright = pytest.importorskip("playwright.sync_api")
+    with playwright.sync_playwright() as runner:
+        browser = runner.chromium.launch()
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        page.goto(WEB, wait_until="networkidle")
+        page.get_by_role("link", name="Đang chờ nhận tiền? Kiểm tra mã QR").click()
+        playwright.expect(page).to_have_url(WEB + "/truoc-khi-xac-nhan")
+        page.get_by_role("button", name="Thử tình huống hoàn tiền").click()
+        check = page.get_by_role("button", name="Kiểm tra ngay", exact=True)
+        check.click()
+        playwright.expect(page.get_by_text("Nếu xác nhận, bạn sẽ chuyển đi 500.000 ₫.")).to_be_visible(timeout=20000)
+        page.get_by_text("Dừng để xác minh", exact=True).click()
+        playwright.expect(page.get_by_role("link", name="Mở Trợ giúp MoMo")).to_have_attribute("href", "https://www.momo.vn/hoi-dap")
+        playwright.expect(page.get_by_role("button", name="Báo cáo cho PayPause")).to_have_count(0)
+        page.get_by_role("button", name="Hỏi người thân").click()
+        playwright.expect(page.get_by_role("heading", name="Người thân sẽ thấy")).to_be_visible()
+        summary = page.get_by_label("Liên kết đã che thông tin, có hiệu lực 24 giờ")
+        shared = browser.new_page()
+        shared.goto(summary.input_value())
+        playwright.expect(shared.get_by_text("Người gửi đang chờ nhận tiền nhưng mã QR yêu cầu chuyển tiền đi.", exact=False)).to_be_visible()
+        assert "500.000" not in shared.locator("main").inner_text()
+        assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+
+        image = qrcode.make(vietqr.build("970436", "0000048755", 50000)).get_image().convert("RGB")
+        for name, picture, heading in (
+            ("payment.png", image, "Đây là mã chuyển tiền đi"),
+            ("blank.png", Image.new("RGB", (150, 150), "white"), "Cần xác minh mã QR"),
+        ):
+            buffer = io.BytesIO()
+            picture.save(buffer, "PNG")
+            page.get_by_label("Chọn ảnh PNG hoặc JPEG").set_input_files({"name": name, "mimeType": "image/png", "buffer": buffer.getvalue()})
+            page.get_by_role("radio", name="Tôi đang trả tiền").check()
+            check.click()
+            playwright.expect(page.get_by_role("heading", name=heading)).to_be_visible(timeout=30000)
+            if name == "payment.png":
+                playwright.expect(page.get_by_text("Dừng để xác minh", exact=True)).to_have_count(0)
+        browser.close()
+
+
 def test_home_checker_shows_six_modes_and_opens_qr_result_on_website_page():
     playwright = pytest.importorskip("playwright.sync_api")
     with playwright.sync_playwright() as runner:

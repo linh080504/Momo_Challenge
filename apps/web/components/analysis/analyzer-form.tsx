@@ -81,7 +81,7 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
           input.image_base64 = await receiptInput(file);
         } else if (file) {
           Object.assign(input, await imageInput(file));
-          if (screenshot) input.qwen_vision = true;
+          if (screenshot || website) input.qwen_vision = true;
         }
       }
       let signedIn = currentSession();
@@ -130,6 +130,7 @@ export function AnalyzerForm({ kind = "website", compact = false, initialDraft, 
     <details className="details" open={file ? true : undefined}>
       <summary>Thêm bằng chứng từ ảnh hoặc tab</summary>
       <Upload file={file} onChange={setFile} disabled={busy} />
+      <p className="micro muted">Khi bấm phân tích, ảnh đính kèm được gửi đến QwenCloud để đọc chữ. Hãy che thông tin riêng tư trước khi gửi.</p>
       <LiveTab disabled={busy} onCapture={setFile} />
     </details>
     <details className="details">

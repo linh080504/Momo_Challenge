@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     phishtank_feed_path: str = ""
     website_capture_enabled: bool = False
     website_public_html_enabled: bool = False
+    momo_partner_hosts: str = ""
     rdap_lookups_per_hour: int = Field(0, ge=0, le=30)
     fraud_url_model_path: str = ""
     analysis_per_minute: int = Field(30, gt=0)

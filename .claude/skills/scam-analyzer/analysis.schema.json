@@ -55,6 +55,18 @@
     "ai_disclaimer": {"type": "string", "const": "Kết quả do AI phân tích và có thể sai. Hãy xác minh qua số tổng đài chính thức trước khi chuyển tiền."},
     "model": {"type": "string"},
     "image_reader": {"enum": ["qwen4-max", "local_ocr", "local_ocr_fallback"]},
+    "transfer_review": {
+      "type": "object", "required": ["intent", "status"], "additionalProperties": false,
+      "properties": {
+        "intent": {"enum": ["receive", "pay"]},
+        "status": {"enum": ["conflict", "payment", "unreadable", "invalid_crc", "link", "unsupported", "unavailable"]},
+        "amount": {"type": ["string", "null"], "pattern": "^[0-9]{1,12}$"},
+        "bank": {"type": ["string", "null"]},
+        "account": {"type": "string"},
+        "quote": {"type": "string", "maxLength": 40},
+        "quote_source": {"enum": ["message", "image"]}
+      }
+    },
     "analysis_path": {"enum": ["fast", "deep"]},
     "specialized_models": {"type": "object", "properties": {"fraud_url": {"type": "string"}}},
     "guidance": {"type": "array", "maxItems": 3, "items": {
@@ -76,6 +88,15 @@
     "website_report": {
       "type": "object", "required": ["sources", "screenshot", "markup"],
       "properties": {
+        "brand_review": {
+          "type": "object", "required": ["verdict", "version", "source", "findings"],
+          "properties": {
+            "verdict": {"enum": ["BENIGN", "ABSTAIN_NEEDS_REVIEW", "IMPOSTOR"]},
+            "version": {"type": "string"},
+            "source": {"enum": ["public_page", "submitted_html", "unavailable"]},
+            "findings": {"type": "array", "items": {"type": "string"}}
+          }
+        },
         "capture_scope": {"enum": ["listed", "unlisted"]},
         "reputation": {"type": "object", "properties": {
           "virustotal": {"$ref": "#/$defs/reputationSource"},
@@ -143,6 +164,7 @@
       }
     },
     "prompt_version": {"type": "string"},
+    "brand_alert": {"type": "object", "required": ["host", "finding"], "properties": {"host": {"type": "string"}, "finding": {"type": "string"}}},
     "latency_ms": {"type": "integer"},
     "degraded": {"type": "boolean", "description": "Dùng chế độ hạn chế khi thiếu một nguồn đối chiếu hoặc mô hình"},
     "analysis_id": {"type": "string", "description": "Bằng chứng có chữ ký, hiệu lực 30 phút để gửi báo cáo hoặc tạo link chia sẻ"}
